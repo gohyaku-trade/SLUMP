@@ -1,0 +1,2695 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SLUMP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Cinzel+Decorative:wght@400;700;900&family=Space+Mono:wght@400;700&family=Shippori+Mincho:wght@600;800&display=swap" rel="stylesheet">
+<style>
+/* ============================================
+   SYSTEM PACHINKO TESTER
+   Color Palette:
+   - bg     : #07090a  (deep void black)
+   - panel  : #0d1413  (panel green-black)
+   - green  : #7dff5a  (SYSTEM terminal green)
+   - amber  : #ffb800  (warning amber)
+   - red    : #ff2a3c  (alert red)
+   - violet : #b14dff  (system purple)
+   - bone   : #efe6d6  (off-white)
+============================================ */
+
+:root{
+  --bg:#04020e;
+  --panel:rgba(6,3,18,0.88);
+  --panel-2:rgba(10,4,26,0.95);
+  --green:#00e5a0;       /* メルカバエメラルド */
+  --green-dim:rgba(0,229,160,0.28);
+  --amber:#d4a843;       /* 神殿の金 */
+  --red:#b5294e;         /* 生命の血 */
+  --violet:#9d4edd;      /* 第三の目 */
+  --cyan:#48cae4;        /* アカシックシアン */
+  --bone:#ede8ff;        /* 霊光 */
+  --muted:#5a5070;
+  --grid:rgba(157,78,221,0.10);
+  --line-w:1px;
+  --gold:#d4a843;
+  --sacred:#b388ff;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+
+html,body{
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(120,40,255,.22), transparent 40%),
+    radial-gradient(ellipse at 80% 20%, rgba(0,180,255,.12), transparent 35%),
+    radial-gradient(ellipse at 50% 80%, rgba(180,30,120,.14), transparent 42%),
+    radial-gradient(ellipse at 50% 50%, rgba(60,10,100,.30), transparent 70%),
+    #04020e;
+  color:var(--bone);
+  font-family:'Cinzel Decorative','Cinzel','Space Mono',monospace;
+  overflow-x:hidden;
+  min-height:100vh;
+}
+
+/* Global noise + scanlines overlay */
+body::before{
+  content:"";
+  position:fixed;inset:0;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(125,255,90,0.04) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 0%, rgba(177,77,255,0.08), transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(255,42,60,0.06), transparent 50%);
+  pointer-events:none;
+  z-index:9998;
+  mix-blend-mode:screen;
+}
+body::after{
+  content:"";
+  position:fixed;inset:0;
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0.08 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  pointer-events:none;
+  z-index:9999;
+  mix-blend-mode:overlay;
+  opacity:0.6;
+}
+
+/* CRT vignette */
+.vignette{
+  position:fixed;inset:0;pointer-events:none;z-index:9997;
+  background:radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%);
+}
+
+/* ============ LAYOUT ============ */
+.app{
+  max-width:1280px;
+  margin:0 auto;
+  padding:14px 14px 100px;
+  position:relative;
+  z-index:1;
+}
+
+/* ============ HEADER ============ */
+.header{
+  position:relative;
+  border:var(--line-w) solid rgba(157,78,221,0.35);
+  background:linear-gradient(180deg,rgba(20,48,24,0.4),rgba(13,20,19,0.9));
+  padding:14px 18px 12px;
+  margin-bottom:12px;
+  clip-path:polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
+}
+.header::before{
+  content:"";
+  position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--violet),var(--amber),var(--violet),transparent);
+  animation:scan 4s linear infinite;
+}
+@keyframes scan{
+  0%{transform:translateX(-100%)}
+  100%{transform:translateX(100%)}
+}
+
+.header-row{
+  display:flex;justify-content:space-between;align-items:flex-start;
+  flex-wrap:wrap;gap:8px;
+}
+.title-block{flex:1;min-width:240px}
+.tag-row{
+  display:flex;gap:6px;align-items:center;
+  font-family:'Space Mono','Cinzel',monospace;
+  font-size:10px;color:var(--green-dim);
+  margin-bottom:6px;letter-spacing:0.15em;
+}
+.tag{
+  padding:2px 6px;border:1px solid var(--green-dim);
+  color:var(--green);
+}
+.tag.red{border-color:var(--red);color:var(--red)}
+.tag.violet{border-color:var(--violet);color:var(--violet)}
+
+h1{
+  font-family:'Cinzel Decorative','Cinzel',serif;
+  font-weight:900;font-size:clamp(20px,4.2vw,34px);
+  letter-spacing:0.04em;
+  color:var(--bone);
+  text-shadow:0 0 14px rgba(157,78,221,0.6),0 0 30px rgba(212,168,67,0.3);
+  line-height:1;
+}
+h1 .acc{color:var(--green)}
+h1 .red{color:var(--red)}
+
+.subtitle{
+  font-family:'Shippori Mincho',serif;
+  font-size:clamp(10px,2vw,13px);
+  color:var(--violet);
+  margin-top:4px;
+  letter-spacing:0.3em;
+  font-weight:600;
+}
+.subtitle .en{
+  font-family:'Cinzel Decorative','Cinzel',serif;
+  color:var(--green-dim);
+  font-size:0.85em;
+  letter-spacing:0.2em;
+  margin-left:8px;
+}
+
+.header-meta{
+  text-align:right;
+  font-family:'Space Mono','Cinzel',monospace;
+  font-size:10px;color:var(--green-dim);
+  line-height:1.5;
+}
+.header-meta .blink{animation:blink 1.2s steps(2) infinite}
+@keyframes blink{50%{opacity:0.2}}
+.header-meta .red-text{color:var(--red)}
+
+/* ============ MAIN GRID ============ */
+.grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:12px;
+}
+@media(max-width:900px){
+  .grid{grid-template-columns:1fr}
+}
+
+/* ============ PANELS ============ */
+.panel{
+  background:var(--panel);
+  border:var(--line-w) solid rgba(157,78,221,0.35);
+  position:relative;
+  padding:10px;
+}
+.panel::before{
+  content:"";
+  position:absolute;top:-1px;left:14px;right:14px;height:1px;
+  background:var(--bg);
+}
+.panel-label{
+  position:absolute;top:-8px;left:18px;
+  background:var(--bg);
+  padding:0 8px;
+  font-family:'Cinzel Decorative','Cinzel',serif;
+  font-size:10px;font-weight:700;
+  letter-spacing:0.2em;
+  color:var(--green);
+}
+.panel-label.violet{color:var(--violet)}
+.panel-label.red{color:var(--red)}
+.panel-label.amber{color:var(--amber)}
+
+.corner{position:absolute;width:10px;height:10px;border:1px solid var(--green);}
+.corner.tl{top:4px;left:4px;border-right:none;border-bottom:none}
+.corner.tr{top:4px;right:4px;border-left:none;border-bottom:none}
+.corner.bl{bottom:4px;left:4px;border-right:none;border-top:none}
+.corner.br{bottom:4px;right:4px;border-left:none;border-top:none}
+
+/* ============ GRAPH AREA ============ */
+.graph-wrap{
+  position:relative;
+  aspect-ratio:16/9;
+  width:100%;
+  background:#04060a;
+  border:1px solid rgba(157,78,221,0.30);
+  overflow:hidden;
+}
+@media(max-width:600px){
+  .graph-wrap{aspect-ratio:4/3}
+}
+#graphCanvas, #geoCanvas, #fxCanvas{
+  position:absolute;inset:0;width:100%;height:100%;
+  display:block;
+  touch-action:none;
+}
+#geoCanvas{cursor:crosshair;z-index:2}
+#fxCanvas{pointer-events:none;z-index:3}
+
+/* HUD overlay on graph */
+.graph-hud{
+  position:absolute;inset:0;pointer-events:none;z-index:4;
+  font-family:'Space Mono','Cinzel',monospace;font-size:10px;
+}
+.hud-tl{position:absolute;top:6px;left:8px;color:var(--green);letter-spacing:0.1em}
+.hud-tr{position:absolute;top:6px;right:8px;color:var(--amber);letter-spacing:0.1em;text-align:right}
+.hud-bl{position:absolute;bottom:6px;left:8px;color:var(--violet);letter-spacing:0.1em}
+.hud-br{position:absolute;bottom:6px;right:8px;color:var(--green-dim);letter-spacing:0.1em;text-align:right}
+
+.hud-tl .v,.hud-tr .v,.hud-bl .v,.hud-br .v{color:var(--bone);font-weight:700}
+
+/* Tap instruction overlay */
+.tap-instr{
+  position:absolute;
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  font-family:'Shippori Mincho',serif;
+  font-size:clamp(11px,1.6vw,14px);
+  color:var(--violet);
+  text-align:center;
+  pointer-events:none;
+  z-index:5;
+  letter-spacing:0.3em;
+  text-shadow:0 0 12px rgba(177,77,255,0.6);
+  opacity:0;
+  transition:opacity 0.3s;
+}
+.tap-instr.show{opacity:0.9}
+.tap-instr .small{
+  display:block;font-family:'Cinzel Decorative','Cinzel',serif;font-size:0.7em;
+  color:var(--green);margin-top:4px;letter-spacing:0.2em;
+}
+
+/* RUSH overlay */
+.rush-overlay{
+  position:absolute;inset:0;pointer-events:none;z-index:6;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Cinzel Decorative','Cinzel',serif;font-weight:900;
+  font-size:clamp(40px,11vw,90px);
+  color:var(--red);
+  letter-spacing:0.1em;
+  text-shadow:0 0 30px var(--red),0 0 60px var(--violet);
+  opacity:0;
+  transition:opacity 0.5s;
+  mix-blend-mode:screen;
+}
+.rush-overlay.active{opacity:0.18;animation:rushPulse 1.5s ease-in-out infinite}
+@keyframes rushPulse{
+  0%,100%{opacity:0.12;transform:scale(1)}
+  50%{opacity:0.25;transform:scale(1.05)}
+}
+
+/* Flash overlay */
+.flash{
+  position:fixed;inset:0;pointer-events:none;z-index:9000;
+  opacity:0;
+  mix-blend-mode:screen;
+}
+.flash.fire{
+  animation:flashFire 0.9s ease-out forwards;
+}
+@keyframes flashFire{
+  0%{opacity:0;background:var(--violet)}
+  20%{opacity:0.8;background:var(--violet)}
+  40%{opacity:0.6;background:var(--green)}
+  60%{opacity:0.8;background:var(--red)}
+  100%{opacity:0;background:transparent}
+}
+
+/* ============ DISPLAY (3-digit reels) ============ */
+.display-section{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:12px;
+}
+@media(max-width:600px){
+  .display-section{grid-template-columns:1fr}
+}
+
+.reels-panel{
+  padding:22px 12px 14px;  /* panel-label 分の余白 */
+}
+
+.reels{
+  display:flex;justify-content:center;align-items:center;
+  gap:clamp(8px,2vw,18px);
+  position:relative;z-index:1;
+}
+.reel{
+  font-family:'Cinzel Decorative','Cinzel',serif;
+  font-weight:900;
+  font-size:clamp(48px,12vw,84px);
+  width:clamp(60px,18vw,110px);
+  height:clamp(70px,14vw,105px);
+  min-width:clamp(60px,18vw,110px);  /* サイズ固定 */
+  min-height:clamp(70px,14vw,105px);
+  max-width:clamp(60px,18vw,110px);
+  max-height:clamp(70px,14vw,105px);
+  display:flex;align-items:center;justify-content:center;
+  text-align:center;
+  color:var(--green);
+  text-shadow:0 0 12px var(--green-dim);
+  background:linear-gradient(180deg,#050218,#020010);
+  border:1px solid rgba(157,78,221,0.30);
+  padding:0;
+  position:relative;
+  letter-spacing:-0.02em;
+  box-sizing:border-box;  /* border含めてサイズ固定 */
+  flex-shrink:0; flex-grow:0;  /* flex変形禁止 */
+  transition:border-color 0.3s, box-shadow 0.3s;
+}
+/* モード別フレーム色（クラスで制御、JSのinlineスタイル不使用） */
+.mode-rush   .reel{ border-color:#b8860b; box-shadow:0 0 10px #ffd70044; }
+.mode-jitan  .reel{ border-color:#6a0dad; box-shadow:0 0 10px #9d4edd44; }
+.mode-normal .reel{ border-color:#1a6b48; box-shadow:0 0 8px #00e5a033;  }
+.reel.spinning{animation:reelSpin 0.08s linear infinite;color:var(--green)}
+@keyframes reelSpin{
+  0%{transform:translateY(-2px)}
+  100%{transform:translateY(2px)}
+}
+.reel.hit{
+  color:var(--amber);
+  text-shadow:0 0 18px var(--amber),0 0 36px var(--red);
+  animation:hitGlow 0.6s ease-in-out infinite alternate;
+  border-color:var(--amber);
+}
+@keyframes hitGlow{
+  0%{filter:brightness(1)}
+  100%{filter:brightness(1.5) drop-shadow(0 0 8px var(--amber))}
+}
+.reel.miss{color:#445;text-shadow:none}
+
+.spin-status{
+  position:absolute;top:6px;left:8px;
+  font-family:'Space Mono','Cinzel',monospace;font-size:10px;
+  color:var(--green-dim);letter-spacing:0.2em;
+}
+.spin-status .v{color:var(--green)}
+
+.spin-tagline{
+  height:0; overflow:hidden; opacity:0; pointer-events:none;
+  position:absolute;bottom:6px;right:8px;
+  font-family:'Shippori Mincho',serif;font-size:11px;
+  color:var(--violet);letter-spacing:0.2em;
+  opacity:0.7;
+}
+
+/* ============ STATUS / WALLET ============ */
+.status-panel{
+  display:flex;flex-direction:column;gap:8px;
+  padding:14px 12px;
+}
+.wallet{
+  text-align:center;padding:6px 0;
+  border-bottom:1px dashed var(--green-dim);
+}
+.wallet-label{
+  font-family:'Space Mono','Cinzel',monospace;
+  font-size:10px;color:var(--green);
+  letter-spacing:0.3em;
+  margin-bottom:2px;
+}
+.wallet-value{
+  font-family:'Cinzel Decorative','Cinzel',serif;
+  font-size:clamp(28px,6vw,42px);
+  font-weight:900;
+  color:var(--bone);
+  text-shadow:0 0 14px var(--green);
+  letter-spacing:0.04em;
+}
+.wallet-value.up{color:var(--amber);text-shadow:0 0 14px var(--amber)}
+.wallet-value.down{color:var(--red);text-shadow:0 0 14px var(--red)}
+.wallet-sub{
+  font-family:'Space Mono','Cinzel',monospace;font-size:10px;
+  color:var(--green-dim);letter-spacing:0.2em;
+}
+
+.status-rows{
+  display:flex;flex-direction:column;gap:5px;
+  font-family:'Space Mono','Cinzel',monospace;font-size:11px;
+}
+.status-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:3px 6px;
+  background:rgba(125,255,90,0.04);
+  border-left:2px solid var(--green-dim);
+}
+.status-row .k{color:var(--green-dim);letter-spacing:0.1em}
+.status-row .v{color:var(--bone);font-weight:700}
+.status-row.alert{border-left-color:var(--red);background:rgba(255,42,60,0.06)}
+.status-row.alert .v{color:var(--red)}
+.status-row.violet{border-left-color:var(--violet);background:rgba(177,77,255,0.06)}
+.status-row.violet .v{color:var(--violet)}
+.status-row.amber{border-left-color:var(--amber);background:rgba(255,184,0,0.06)}
+.status-row.amber .v{color:var(--amber)}
+
+/* ============ BUTTONS ============ */
+.controls{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:8px;
+  margin-top:12px;
+}
+.controls-4{
+  grid-template-columns:repeat(4,1fr);
+}
+@media(max-width:760px){
+  .controls-4{ grid-template-columns:repeat(2,1fr); }
+}
+
+.btn{
+  position:relative;
+  font-family:'Cinzel Decorative','Cinzel',serif;
+  font-weight:700;font-size:13px;
+  letter-spacing:0.15em;
+  color:var(--bone);
+  background:linear-gradient(180deg,#1a2a1a,#0a1410);
+  border:1px solid var(--green);
+  padding:14px 8px;
+  cursor:pointer;
+  text-transform:uppercase;
+  transition:transform 0.05s,filter 0.15s;
+  clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  user-select:none;
+}
+.btn:hover{filter:brightness(1.3)}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{
+  opacity:0.35;cursor:not-allowed;
+  filter:grayscale(0.7);
+}
+.btn .jp{
+  display:block;font-family:'Shippori Mincho',serif;
+  font-size:9px;color:var(--green);
+  letter-spacing:0.4em;margin-top:2px;font-weight:600;
+}
+
+.btn.primary{
+  border-color:var(--green);
+  background:linear-gradient(180deg,#1a3a1a,#0a1410);
+  box-shadow:inset 0 0 20px rgba(125,255,90,0.15);
+}
+.btn.primary:hover{box-shadow:inset 0 0 30px rgba(125,255,90,0.3),0 0 12px rgba(125,255,90,0.4)}
+
+.btn.bet{
+  border-color:var(--amber);
+  background:linear-gradient(180deg,#3a2a0a,#1a0e04);
+  color:var(--amber);
+  box-shadow:inset 0 0 20px rgba(255,184,0,0.12);
+}
+.btn.bet .jp{color:var(--amber)}
+.btn.bet.armed{
+  animation:armedPulse 0.8s ease-in-out infinite;
+  background:linear-gradient(180deg,#5a3a0a,#2a1a04);
+}
+@keyframes armedPulse{
+  0%,100%{box-shadow:inset 0 0 20px rgba(255,184,0,0.2),0 0 0 rgba(255,184,0,0)}
+  50%{box-shadow:inset 0 0 30px rgba(255,184,0,0.4),0 0 16px rgba(255,184,0,0.6)}
+}
+
+.btn.danger{
+  border-color:var(--red);
+  background:linear-gradient(180deg,#3a0a0e,#1a0408);
+  color:var(--red);
+}
+.btn.danger .jp{color:var(--red)}
+
+.btn.violet{
+  border-color:var(--violet);
+  background:linear-gradient(180deg,#2a0a3a,#10041a);
+  color:var(--violet);
+}
+.btn.violet .jp{color:var(--violet)}
+
+.btn-mini{
+  font-size:10px;padding:8px 10px;letter-spacing:0.1em;
+  clip-path:polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 5px 100%, 0 calc(100% - 5px));
+}
+
+/* ============ LOG ============ */
+.log-panel{
+  margin-top:12px;
+  padding:12px 10px 10px;
+}
+.log-list{
+  list-style:none;
+  height:170px;
+  overflow-y:auto;
+  font-family:'Space Mono','Cinzel',monospace;
+  font-size:11px;
+  padding:4px 6px 4px 0;
+  scrollbar-width:thin;
+  scrollbar-color:var(--green-dim) transparent;
+}
+.log-list::-webkit-scrollbar{width:6px}
+.log-list::-webkit-scrollbar-track{background:transparent}
+.log-list::-webkit-scrollbar-thumb{background:var(--green-dim)}
+
+.log-list li{
+  padding:3px 6px;
+  border-bottom:1px dashed rgba(125,255,90,0.08);
+  display:flex;gap:8px;align-items:baseline;
+  color:var(--bone);
+  animation:logIn 0.3s ease-out;
+}
+@keyframes logIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+.log-list .idx{color:var(--green-dim);min-width:48px;font-size:10px}
+.log-list .num{color:var(--green);font-weight:700;letter-spacing:0.1em}
+.log-list .tag-hit{color:var(--amber);font-weight:700}
+.log-list .tag-miss{color:#556}
+.log-list .tag-rush{color:var(--red);font-weight:700}
+.log-list .tag-bet{color:var(--amber)}
+.log-list .tag-violet{color:var(--violet)}
+.log-list .tag-coin{color:var(--violet);font-weight:700}
+
+/* ============ COIN TOSS MODAL ============ */
+.coin-modal{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,0.85);
+  z-index:9500;
+  display:none;
+  align-items:center;justify-content:center;
+  flex-direction:column;
+  backdrop-filter:blur(4px);
+}
+.coin-modal.active{display:flex;animation:coinIn 0.4s ease-out}
+@keyframes coinIn{from{opacity:0}to{opacity:1}}
+
+.coin-modal-title{
+  font-family:'Shippori Mincho',serif;
+  font-size:clamp(16px,3vw,22px);
+  color:var(--violet);
+  letter-spacing:0.4em;
+  margin-bottom:6px;
+  text-shadow:0 0 12px rgba(177,77,255,0.6);
+}
+.coin-modal-sub{
+  font-family:'Cinzel Decorative','Cinzel',serif;
+  font-size:11px;color:var(--green);
+  letter-spacing:0.3em;margin-bottom:30px;
+}
+
+.coin{
+  width:140px;height:140px;
+  border-radius:50%;
+  background:radial-gradient(circle at 30% 30%, var(--amber),var(--red) 60%, #3a0a0e);
+  border:3px solid var(--amber);
+  box-shadow:0 0 40px var(--amber),0 0 80px var(--red);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Shippori Mincho',serif;
+  font-size:48px;font-weight:800;
+  color:#fff;
+  text-shadow:0 0 10px #000;
+  position:relative;
+}
+.coin.flipping{
+  animation:coinFlip 0.15s linear infinite;
+}
+@keyframes coinFlip{
+  0%{transform:rotateY(0deg) scale(1)}
+  50%{transform:rotateY(180deg) scale(0.7)}
+  100%{transform:rotateY(360deg) scale(1)}
+}
+.coin-result{
+  margin-top:24px;
+  font-family:'Cinzel Decorative','Cinzel',serif;font-weight:900;
+  font-size:clamp(20px,4vw,28px);
+  letter-spacing:0.2em;
+  color:var(--bone);
+  min-height:30px;
+}
+.coin-result.win{color:var(--amber);text-shadow:0 0 16px var(--amber)}
+.coin-result.lose{color:#556}
+
+/* ============ FOOTER STRIP ============ */
+.footer-strip{
+  margin-top:14px;
+  padding:6px 10px;
+  border-top:1px solid var(--green-dim);
+  display:flex;justify-content:space-between;
+  font-family:'Space Mono','Cinzel',monospace;
+  font-size:9px;color:var(--green-dim);
+  letter-spacing:0.2em;
+}
+.footer-strip .jp{font-family:'Shippori Mincho',serif;color:var(--violet)}
+
+/* glitch text */
+.glitch{position:relative;display:inline-block}
+.glitch::before,.glitch::after{
+  content:attr(data-text);
+  position:absolute;top:0;left:0;width:100%;
+}
+.glitch::before{color:var(--red);transform:translate(-1px,0);clip-path:inset(0 0 50% 0);opacity:0.6;animation:glitchA 3s infinite}
+.glitch::after{color:var(--violet);transform:translate(1px,0);clip-path:inset(50% 0 0 0);opacity:0.5;animation:glitchB 2.7s infinite}
+@keyframes glitchA{0%,90%,100%{transform:translate(-1px,0)}92%{transform:translate(-3px,1px)}94%{transform:translate(2px,-1px)}}
+@keyframes glitchB{0%,88%,100%{transform:translate(1px,0)}90%{transform:translate(3px,-1px)}93%{transform:translate(-2px,1px)}}
+
+/* small alert pill */
+.alert-pill{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 6px;border:1px solid var(--red);
+  font-family:'Space Mono','Cinzel',monospace;font-size:9px;
+  color:var(--red);letter-spacing:0.2em;
+  animation:alertBlink 1s steps(2) infinite;
+}
+@keyframes alertBlink{50%{background:var(--red);color:#000}}
+
+/* sound toggle */
+.sound-toggle{
+  display:flex;align-items:center;gap:4px;
+  font-family:'Space Mono','Cinzel',monospace;font-size:10px;
+  color:var(--green);
+  cursor:pointer;
+  padding:3px 8px;border:1px solid var(--green-dim);
+}
+.sound-toggle:hover{background:rgba(125,255,90,0.1)}
+.sound-toggle.off{color:var(--red);border-color:var(--red)}
+
+/* ============ RAINBOW EFFECT ============ */
+@keyframes rainbowBG{
+  0%  {background:rgba(255,0,0,0.75)}
+  12% {background:rgba(255,80,0,0.75)}
+  25% {background:rgba(255,220,0,0.75)}
+  37% {background:rgba(0,255,80,0.75)}
+  50% {background:rgba(0,200,255,0.75)}
+  62% {background:rgba(0,0,255,0.75)}
+  75% {background:rgba(120,0,255,0.75)}
+  87% {background:rgba(255,0,200,0.75)}
+  100%{background:rgba(255,0,0,0.75)}
+}
+.flash.rainbow{
+  animation:rainbowBG 0.12s linear 10 forwards !important;
+}
+@keyframes reelRainbow{
+  0%  {color:#ff0000;text-shadow:0 0 30px #ff0000,0 0 60px #ff0000}
+  12% {color:#ff8800;text-shadow:0 0 30px #ff8800,0 0 60px #ff8800}
+  25% {color:#ffff00;text-shadow:0 0 30px #ffff00,0 0 60px #ffff00}
+  37% {color:#00ff88;text-shadow:0 0 30px #00ff88,0 0 60px #00ff88}
+  50% {color:#00ccff;text-shadow:0 0 30px #00ccff,0 0 60px #00ccff}
+  62% {color:#4400ff;text-shadow:0 0 30px #4400ff,0 0 60px #4400ff}
+  75% {color:#cc00ff;text-shadow:0 0 30px #cc00ff,0 0 60px #cc00ff}
+  87% {color:#ff00aa;text-shadow:0 0 30px #ff00aa,0 0 60px #ff00aa}
+  100%{color:#ff0000;text-shadow:0 0 30px #ff0000,0 0 60px #ff0000}
+}
+.reel.rainbow{animation:reelRainbow 0.12s linear 12 forwards}
+@keyframes graphRainbow{
+  0%  {box-shadow:inset 0 0 60px rgba(255,0,0,0.7)}
+  25% {box-shadow:inset 0 0 60px rgba(255,220,0,0.7)}
+  50% {box-shadow:inset 0 0 60px rgba(0,200,255,0.7)}
+  75% {box-shadow:inset 0 0 60px rgba(200,0,255,0.7)}
+  100%{box-shadow:inset 0 0 60px rgba(255,0,0,0.7)}
+}
+.graph-wrap.rainbow{animation:graphRainbow 0.12s linear 10 forwards}
+
+</style>
+</head>
+<body>
+
+<div class="vignette"></div>
+<div class="flash" id="flash"></div>
+<div class="app">
+
+  <!-- =================== HEADER =================== -->
+  <header class="header">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="header-row">
+      <div class="title-block">
+        <div class="tag-row">
+          <span class="tag">CLASSIFIED // 機密</span>
+          <span class="tag red">LV-07</span>
+          <span class="tag violet">SYNC 73.2%</span>
+        </div>
+        <h1>SLUMP</h1>
+        <div class="subtitle">LT機 検証装置 <span class="en">// TURBO × 5x × NO REEL</span></div>
+      </div>
+      <div class="header-meta">
+        <div>UNIT: <span class="blink">●</span> ONLINE</div>
+        <div>SYS-ID: <span style="color:var(--bone)">SYSTEM-13C-SLUMP</span></div>
+        <div class="red-text" id="clockUTC">UTC --:--:--</div>
+        <div style="margin-top:4px"><span class="sound-toggle" id="soundToggle">♪ SOUND : ON</span></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- =================== MAIN GRID =================== -->
+  <div class="grid">
+
+    <!-- LEFT : graph + reels -->
+    <section>
+      <!-- Graph -->
+      <div class="panel">
+        <span class="panel-label">▌SLUMP GRAPH // 出玉推移</span>
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+
+        <div class="graph-wrap" id="graphWrap">
+          <canvas id="graphCanvas"></canvas>
+          <canvas id="geoCanvas"></canvas>
+          <canvas id="fxCanvas"></canvas>
+
+          <div class="graph-hud">
+            <div class="hud-tl"><span class="v" id="hudSpin" style="opacity:0.45;font-size:11px">0000</span></div>
+            <div class="hud-tr"><span class="v" id="hudDiff" style="font-size:11px">+0</span></div>
+            <div class="hud-bl"><span class="v" id="hudMode" style="font-size:11px;font-weight:900;letter-spacing:0.2em">NORMAL</span></div>
+            <div class="hud-br"><span class="v" id="hudGeo" style="font-size:9px;opacity:0.35"></span></div>
+          </div>
+
+          <div class="tap-instr" id="tapInstr">
+            ※ 2点で神聖幾何学を描画 ※
+            <span class="small">TAP POINTER → TAP POINTER</span>
+          </div>
+
+          <div class="rush-overlay" id="rushOverlay">METARUSH</div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-family:'Space Mono','Cinzel',monospace;font-size:10px;color:var(--green-dim);">
+          <span>X: 回転数 (rotations)</span>
+          <span style="color:var(--violet)">METATRON-13 // 13円構造</span>
+          <span>Y: 差玉 / asset</span>
+        </div>
+      </div>
+
+      <!-- Reels Display -->
+      <div class="display-section">
+        <div class="panel reels-panel">
+          <span class="panel-label">▌SPIN</span>
+          <div class="corner tl"></div><div class="corner tr"></div>
+          <div class="corner bl"></div><div class="corner br"></div>
+          <div class="reels">
+            <div class="reel" id="reel0">-</div>
+            <div class="reel" id="reel1">-</div>
+            <div class="reel" id="reel2">-</div>
+          </div>
+          <!-- RUSH残/時短残をSPIN欄に表示 -->
+          <div id="rushCountRow" style="display:none;margin-top:8px;text-align:center">
+            <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--green-dim);letter-spacing:0.25em" id="rushLeftLabel">RUSH残</div>
+            <div style="font-family:'Cinzel Decorative','Cinzel',serif;font-size:clamp(20px,4vw,28px);font-weight:900;letter-spacing:0.1em" id="rushLeft">0</div>
+          </div>
+        </div>
+
+        <!-- Status panel -->
+        <div class="panel status-panel">
+          <span class="panel-label violet">▌STATUS</span>
+          <div class="corner tl"></div><div class="corner tr"></div>
+          <div class="corner bl"></div><div class="corner br"></div>
+
+          <!-- 持ち玉 + 金額 -->
+          <div class="wallet">
+            <div class="wallet-value" id="walletValue">0</div>
+            <div class="wallet-sub" id="walletYen">¥0</div>
+          </div>
+
+          <!-- 初当たりSPIN -->
+          <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;
+                      font-family:'Space Mono',monospace;font-size:11px;padding:4px 6px;
+                      background:rgba(0,255,170,0.05);border-left:2px solid var(--green-dim)">
+            <span style="color:var(--green-dim)">初当たりSPIN</span>
+            <span style="color:var(--bone);font-weight:700" id="statusSpinSinceHit">0</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Controls -->
+      <div class="controls controls-4" id="controlsRow">
+        <button class="btn primary" id="btnAutoFree">
+          <span id="btnAutoFreeMain">通常オート</span>
+          <span class="jp" id="btnAutoFreeSub">FREE AUTO (シミュ)</span>
+        </button>
+        <button class="btn bet" id="btnAutoBet">
+          <span id="btnAutoBetMain">賭けオート</span>
+          <span class="jp" id="btnAutoBetSub">BET AUTO (玉消費)</span>
+        </button>
+
+        <button class="btn" id="btnGeoReset" style="border-color:var(--violet);color:var(--violet)">
+          図形リセット
+          <span class="jp" style="color:var(--violet)">CLEAR GEO</span>
+        </button>
+        <button class="btn danger" id="btnReset">
+          リセット
+          <span class="jp">FULL RESET</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- RIGHT : log + info -->
+  </div>
+
+  <div class="footer-strip">
+    <span>© CLASSIFIED // RESEARCH UNIT 13</span>
+    <span class="jp">特異点接近中</span>
+    <span class="glitch" data-text="DO NOT DISTRIBUTE">DO NOT DISTRIBUTE</span>
+  </div>
+</div>
+
+<!-- Coin toss modal -->
+
+
+<script>
+/* ==================================================
+   GEOMETRY PACHINKO TESTER  -  main script
+   ================================================== */
+
+// ==================== CONSTANTS (e新世紀エヴァンゲリオン〜はじまりの記憶〜) ====================
+// スペック出典: 実機データ(P-WORLD / ぱちんこキュレーション)
+const HIT_RATE        = 1 / 399.9;    // 通常・時短(チャンスタイム) 当たり確率
+const ST_HIT_RATE     = 1 / 99.6;    // RUSH(インパクトモード) 中当たり確率
+const ST_SPINS        = 157;          // RUSH回転数（ロングST）
+const JITAN_SPINS     = 100;          // チャンスタイム(時短)回転数
+const YUTAI_TRIGGER   = 999999;       // 遊タイムなし（大きな値で実質無効）
+const YUTAI_SPINS     = 379;
+const SPINS_PER_250   = 17.9;         // 回転率 17.9回/250玉（ゼロサム理論値）
+const COST_PER_SPIN   = 13.97;        // 1回転あたり消費玉 ゼロサム理論値（5000万回転検証済）
+const YEN_PER_BALL    = 4;
+const INIT_BALL       = 0;
+
+function rollHitKind(){
+  const r=Math.random(); let acc=0;
+  for(const h of HIT_TABLE){ acc+=h.rate; if(r<acc) return h; }
+  return HIT_TABLE[0];
+}
+
+// ヘソ（特図1）振り分け
+const HIT_TABLE = [
+  { kind:'rush_sp', rate:0.005, payout:1500, jitan:157, label:'10R RUSH MAX',  isRush:true  },
+  { kind:'rush',    rate:0.500, payout:300,  jitan:157, label:'2R RUSH',        isRush:true  },
+  { kind:'jitan',   rate:0.495, payout:300,  jitan:100, label:'チャンスタイム', isRush:false },
+];
+
+// RUSH中（特図2）振り分け ─ 全てRUSH継続
+const RUSH_TABLE = [
+  { kind:'rush_max', rate:0.005, payout:4800, label:'8R×4 MAX 4800個' },
+  { kind:'rush_std', rate:0.995, payout:2400, label:'8R×2 STD 2400個' },
+];
+
+function rollRushKind(){
+  const r=Math.random(); let acc=0;
+  for(const h of RUSH_TABLE){ acc+=h.rate; if(r<acc) return h; }
+  return RUSH_TABLE[0];
+}
+
+// ==================== STATE ====================
+const state = {
+  ball          : INIT_BALL,
+  realBall      : INIT_BALL,       // ウォレット表示用（FREE AUTOでも変わらない）
+  totalCost     : 0,               // 【差玉用】累計コスト
+  totalPayout   : 0,               // 【差玉用】累計払い出し
+  spinCount     : 0,               // 通常時のみカウント（グラフ横軸）
+  spinSinceHit  : 0,               // 初当たりからのSPIN数（通常時のみ）
+  hits          : 0,
+  stHits        : 0,
+  stSpinsLeft   : 0,
+  mode          : 'NORMAL',
+  jitanLeft     : 0,
+  isHC          : false,
+  isSpinning    : false,
+  autoMode      : 'OFF',
+  freeAutoLocked: false,
+  diffHistory   : [{x:0,y:0}],
+  graphDirty    : true,   // グラフ再描画フラグ
+  _yMaxCache    : 1000,   // yMaxキャッシュ
+  _yMinVal      : 0,      // 差玉の最小値（逐次更新）
+  _yMaxVal      : 0,      // 差玉の最大値（逐次更新）
+  hitMarks      : [],
+  maxDiff       : 0,
+  minDiff       : 0,
+  maxDrawdown   : 0,
+  hamariCurrent : 0,
+  maxHamari     : 0,
+  geometry      : null,
+  geoTapStage   : 0,
+  geoTempCenter : null,
+  soundOn       : true,
+};
+
+
+// ==================== DOM ====================
+const $ = (id) => document.getElementById(id);
+const graphCanvas = $('graphCanvas');
+const geoCanvas   = $('geoCanvas');
+const fxCanvas    = $('fxCanvas');
+const gctx = graphCanvas.getContext('2d');
+const geoctx = geoCanvas.getContext('2d');
+const fxctx = fxCanvas.getContext('2d');
+
+// ==================== AUDIO ====================
+let audioCtx = null;
+
+function initAudio(){
+  if(audioCtx) return;
+  try{
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    startBGM();
+  }catch(e){ console.warn('Audio init failed', e); }
+}
+
+function beep(freq=440, dur=0.08, type='square', vol=0.08){
+  if(!state.soundOn || !audioCtx) return;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.value = freq;
+  g.gain.value = 0;
+  g.gain.linearRampToValueAtTime(vol, audioCtx.currentTime+0.005);
+  g.gain.linearRampToValueAtTime(0, audioCtx.currentTime+dur);
+  o.connect(g).connect(audioCtx.destination);
+  o.start();
+  o.stop(audioCtx.currentTime+dur+0.02);
+}
+
+// SFX
+// ============================================================
+// SFX 合成エンジン
+// ============================================================
+
+// 周波数スイープ（ポルタメント）
+function sweep(startF, endF, dur, type='sine', vol=0.12){
+  if(!state.soundOn||!audioCtx) return;
+  const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+  o.type=type;
+  o.frequency.setValueAtTime(startF, audioCtx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(endF, audioCtx.currentTime+dur);
+  g.gain.setValueAtTime(0, audioCtx.currentTime);
+  g.gain.linearRampToValueAtTime(vol, audioCtx.currentTime+0.004);
+  g.gain.linearRampToValueAtTime(0, audioCtx.currentTime+dur);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime+dur+0.02);
+}
+
+// ホワイトノイズバースト（タムやスネア質感）
+function noiseBurst(dur=0.08, vol=0.05){
+  if(!state.soundOn||!audioCtx) return;
+  const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*dur,audioCtx.sampleRate);
+  const data=buf.getChannelData(0);
+  for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1);
+  const src=audioCtx.createBufferSource(); src.buffer=buf;
+  const fil=audioCtx.createBiquadFilter(); fil.type='highpass'; fil.frequency.value=1800;
+  const g=audioCtx.createGain();
+  g.gain.setValueAtTime(vol, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+dur);
+  src.connect(fil).connect(g).connect(audioCtx.destination);
+  src.start();
+}
+
+// FM合成ベル: 金属的・宝物感
+function fmBell(carrier, modRatio, modIdx, dur, vol=0.09, delay=0){
+  if(!state.soundOn||!audioCtx) return;
+  setTimeout(()=>{
+    const t=audioCtx.currentTime;
+    const mod=audioCtx.createOscillator();
+    const modG=audioCtx.createGain();
+    const car=audioCtx.createOscillator();
+    const outG=audioCtx.createGain();
+    mod.frequency.value=carrier*modRatio;
+    modG.gain.setValueAtTime(carrier*modIdx, t);
+    modG.gain.exponentialRampToValueAtTime(1, t+dur*0.9);
+    mod.connect(modG).connect(car.frequency);
+    car.type='sine'; car.frequency.value=carrier;
+    outG.gain.setValueAtTime(vol, t);
+    outG.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    car.connect(outG).connect(audioCtx.destination);
+    mod.start(t); mod.stop(t+dur);
+    car.start(t); car.stop(t+dur);
+  }, delay);
+}
+
+// スーパーソー（3オシレーターデチューン）: 暑苦しい壁音
+function supersaw(freq, dur, vol=0.07, detune=8){
+  if(!state.soundOn||!audioCtx) return;
+  [-detune, 0, detune].forEach((d,i)=>{
+    const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+    o.type='sawtooth'; o.frequency.value=freq; o.detune.value=d;
+    g.gain.setValueAtTime(0, audioCtx.currentTime);
+    g.gain.linearRampToValueAtTime(vol, audioCtx.currentTime+0.008);
+    g.gain.linearRampToValueAtTime(0, audioCtx.currentTime+dur);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime+dur+0.03);
+  });
+}
+
+// サブベース爆弾: 腹に来る低周波
+function subBoom(freq=55, dur=0.4, vol=0.18){
+  if(!state.soundOn||!audioCtx) return;
+  const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+  o.type='sine'; o.frequency.setValueAtTime(freq*2, audioCtx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(freq, audioCtx.currentTime+0.04);
+  g.gain.setValueAtTime(0, audioCtx.currentTime);
+  g.gain.linearRampToValueAtTime(vol, audioCtx.currentTime+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+dur);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime+dur);
+}
+
+const sfx = {
+
+  // ボタン: 短いクリック
+  btn: () => {
+    if(!state.soundOn||!audioCtx) return;
+    beep(1200, 0.03, 'square', 0.04);
+  },
+
+  // スピン: パチンコ玉が転がる感触（短いノイズ）
+  spin: () => {
+    if(!state.soundOn||!audioCtx) return;
+    noiseBurst(0.022, 0.045);
+    beep(800, 0.018, 'sine', 0.025);
+  },
+
+  // ハズレ: 短い落下音
+  miss: () => {
+    if(!state.soundOn||!audioCtx) return;
+    sweep(400, 220, 0.12, 'sine', 0.030);
+  },
+
+  // ポキューン: 昔ながらのパチンコ当たり予告音
+  pokun: (delay=0, pitchMult=1) => {
+    if(!state.soundOn||!audioCtx) return;
+    setTimeout(()=>{
+      sweep(300*pitchMult, 1200*pitchMult, 0.14, 'sine', 0.07);
+      setTimeout(()=> beep(1800*pitchMult, 0.18, 'sine', 0.045), 120);
+    }, delay);
+  },
+
+  // 当たり: 古典的な上昇チャイム（3音）
+  hit: (kind='4r') => {
+    if(!state.soundOn||!audioCtx) return;
+    if(kind==='10r'){
+      subBoom(28,1.1,0.26); subBoom(38,0.9,0.22);
+      setTimeout(()=>{ subBoom(22,1.3,0.32); noiseBurst(0.22,0.07,0,'lowpass'); },70);
+      setTimeout(()=>{ [523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>{ beep(f,0.22,'sine',0.035); },i*50)); },250);
+    } else if(kind==='6r'){
+      subBoom(36,0.9,0.22); subBoom(48,0.8,0.18);
+      setTimeout(()=>{ noiseBurst(0.16,0.06,0,'lowpass'); },60);
+      setTimeout(()=>{ [392,494,587,784].forEach((f,i)=>setTimeout(()=>beep(f,0.18,'sine',0.030),i*45)); },200);
+    } else if(kind==='4r_sp'){
+      subBoom(40,0.8,0.18); subBoom(55,0.7,0.14);
+      setTimeout(()=>{ noiseBurst(0.10,0.04,0,'lowpass'); },50);
+      setTimeout(()=>{ [392,494,659,784].forEach((f,i)=>setTimeout(()=>beep(f,0.14,'sine',0.026),i*38)); },160);
+    } else {
+      subBoom(48,0.7,0.14); subBoom(60,0.6,0.12);
+      setTimeout(()=>{ noiseBurst(0.08,0.03,0,'lowpass'); },40);
+      setTimeout(()=>{ [329,415,523,659].forEach((f,i)=>setTimeout(()=>beep(f,0.12,'sine',0.022),i*30)); },130);
+    }
+  },
+
+  // ラッシュ突入: 上昇グリッサンド→チャイム
+  rush: () => {
+    if(!state.soundOn||!audioCtx) return;
+    sweep(200, 1600, 0.3, 'sine', 0.06);
+    setTimeout(() => {
+      [523,784,1047,1568].forEach((f, i) =>
+        setTimeout(() => beep(f, 0.12, 'sine', 0.032), i * 30));
+    }, 150);
+  },
+
+  // コイン: 金属的なカラン
+  coin: () => {
+    if(!state.soundOn||!audioCtx) return;
+    fmBell(1760, 2.756, 3, 0.20, 0.045);
+  },
+
+  geoTap: () => {
+    if(!state.soundOn||!audioCtx) return;
+    fmBell(2400, 2, 2, 0.08, 0.030);
+  },
+
+  // ST中当たり: ポキューン+チャイム
+  rushHit: () => {
+    if(!state.soundOn||!audioCtx) return;
+    sfx.pokun(0, 1.2);
+    setTimeout(() => {
+      [659, 784, 1047, 1319].forEach((f, i) =>
+        setTimeout(() => beep(f, 0.18, 'sine', 0.040), i * 80));
+    }, 280);
+  },
+
+  // ガチャ: チック
+  gacha: () => {
+    if(!state.soundOn||!audioCtx) return;
+    beep(1600, 0.012, 'square', 0.035);
+  },
+
+  // 確定: 神殿崩壊
+  bigHit: () => {
+    if(!state.soundOn||!audioCtx) return;
+    subBoom(36, 0.8, 0.25); subBoom(45, 0.7, 0.20);
+    setTimeout(()=>{ subBoom(28, 1.0, 0.30); noiseBurst(0.25, 0.09); }, 80);
+    setTimeout(()=> fmBell(880, 2, 4, 0.6, 0.055), 120);
+    if(navigator.vibrate) navigator.vibrate([200,80,200]);
+  },
+
+  // ニアミス
+  nearMiss: () => {
+    if(!state.soundOn||!audioCtx) return;
+    sweep(600, 300, 0.20, 'sine', 0.040);
+  },
+
+  // ハズレ微報酬
+  microReward: () => {
+    if(!state.soundOn||!audioCtx) return;
+    fmBell(1760, 2.756, 2, 0.15, 0.020);
+  },
+};
+
+// ==================== BGM ENGINE ====================
+// ハウスミュージック: メロディなし、ビート主体、音量控えめ
+let bgmNodes = {};
+let bgmCurrentMode = null;
+let bgmSwitching = false;
+
+function startBGM(){
+  if(!audioCtx) return;
+  switchBGM('NORMAL');
+}
+
+function switchBGM(mode){
+  if(!audioCtx) return;
+  if(bgmCurrentMode === mode) return;
+  if(bgmSwitching) return;
+  bgmSwitching = true;
+  stopAllBGMNodes();
+  bgmCurrentMode = mode;
+  setTimeout(()=>{
+    if(bgmCurrentMode === mode){
+      if(!state.soundOn){ bgmSwitching=false; return; }
+      if(mode==='NORMAL') buildNormalBGM();
+      else if(mode==='JITAN') buildJitanBGM();
+      else if(mode==='ST') buildMetarushBGM();
+    }
+    bgmSwitching = false;
+  }, 80);
+}
+
+function stopAllBGMNodes(){
+  ['interval','interval2','interval3'].forEach(k=>{
+    if(bgmNodes[k]){ clearInterval(bgmNodes[k]); bgmNodes[k]=null; }
+  });
+  if(bgmNodes.oscs) bgmNodes.oscs.forEach(o=>{ try{ o.stop(); }catch(e){} });
+  bgmNodes = {};
+}
+
+// --- NORMAL: 神殿ドローン（BPM108）---
+function buildNormalBGM(){
+  if(!audioCtx) return;
+  bgmNodes.oscs = [];
+
+  // キックのみ（シンプル）
+  let ki=0;
+  bgmNodes.interval = setInterval(()=>{
+    if(!state.soundOn||bgmCurrentMode!=='NORMAL'||!audioCtx) return;
+    if(ki%4===0){
+      // キック: 低音サイン瞬間
+      subBoom(55, 0.14, 0.06);
+    } else if(ki%4===2){
+      // スネア: 白ノイズ
+      noiseBurst(0.04, 0.028);
+    }
+    // ハイハット: 偶数拍
+    if(ki%2===0) noiseBurst(0.012, 0.018);
+    ki++;
+    // 32拍ごとに沈黙（呼吸）
+    if(ki%32===0) ki=32; // continue
+  }, 620); // BPM97 - より荘厳
+}
+
+// --- JITAN: 神殿鼓動（BPM124）---
+function buildJitanBGM(){
+  if(!audioCtx) return;
+  bgmNodes.oscs = [];
+
+  let ki=0;
+  bgmNodes.interval = setInterval(()=>{
+    if(!state.soundOn||bgmCurrentMode!=='JITAN'||!audioCtx) return;
+    // キック
+    if(ki%4===0 || ki%8===6){
+      subBoom(55, 0.12, 0.07);
+      noiseBurst(0.012, 0.04);
+    }
+    // スネア
+    if(ki%4===2) noiseBurst(0.05, 0.035);
+    // クローズハット
+    if(ki%2===0) noiseBurst(0.010, 0.022);
+    // オープンハット（裏）
+    if(ki%4===3) noiseBurst(0.025, 0.020);
+    ki++;
+  }, 469); // BPM128
+}
+
+// --- ST/RUSH: フル4つ打ち（BPM135）+ ベースパルス ---
+function buildMetarushBGM(){
+  if(!audioCtx) return;
+  bgmNodes.oscs = [];
+
+  let ki=0;
+  bgmNodes.interval = setInterval(()=>{
+    if(!state.soundOn||bgmCurrentMode!=='ST'||!audioCtx) return;
+    // 4つ打ちキック
+    if(ki%4===0){
+      subBoom(50, 0.10, 0.08);
+      noiseBurst(0.012, 0.045);
+    }
+    // スネア
+    if(ki%4===2) noiseBurst(0.055, 0.040);
+    // ハット
+    noiseBurst(0.008, ki%2===0 ? 0.025 : 0.015);
+    // ベースパルス（16分）
+    if(ki%2===0){
+      sweep(82, 60, 0.08, 'sine', 0.045);
+    }
+    ki++;
+  }, 444); // BPM135
+}
+
+
+// ==================== CANVAS RESIZE ====================
+function resizeCanvases(){
+  [graphCanvas, geoCanvas, fxCanvas].forEach(c => {
+    const rect = c.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    c.width = rect.width * dpr;
+    c.height = rect.height * dpr;
+    c.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+  });
+  drawSlumpGraph();
+  drawGeometry();
+}
+window.addEventListener('resize', resizeCanvases);
+
+// ==================== SLUMP GRAPH ====================
+function drawSlumpGraph(){
+  const w = graphCanvas.getBoundingClientRect().width;
+  const h = graphCanvas.getBoundingClientRect().height;
+  const ctx = gctx;
+  ctx.clearRect(0,0,w,h);
+
+  // Background gradient
+  const bg = ctx.createLinearGradient(0,0,0,h);
+  bg.addColorStop(0,'#040810');
+  bg.addColorStop(1,'#02050a');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0,0,w,h);
+
+  // Mode-tinted overlay for ST/JITAN
+  if(state.mode === 'ST'){
+    const grad = ctx.createRadialGradient(w/2,h/2,0,w/2,h/2,w/1.2);
+    grad.addColorStop(0,'rgba(255,42,60,0.15)');
+    grad.addColorStop(1,'rgba(177,77,255,0.05)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,w,h);
+  } else if(state.mode === 'JITAN'){
+    const grad = ctx.createRadialGradient(w/2,h/2,0,w/2,h/2,w/1.2);
+    grad.addColorStop(0,'rgba(177,77,255,0.10)');
+    grad.addColorStop(1,'rgba(177,77,255,0.0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,w,h);
+  }
+
+  // Grid
+  ctx.strokeStyle = 'rgba(0,229,255,0.10)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const cols = 16, rows = 8;
+  for(let i=0;i<=cols;i++){
+    const x = (i/cols)*w;
+    ctx.moveTo(x,0); ctx.lineTo(x,h);
+  }
+  for(let i=0;i<=rows;i++){
+    const y = (i/rows)*h;
+    ctx.moveTo(0,y); ctx.lineTo(w,y);
+  }
+  ctx.stroke();
+
+  // Center line (zero)
+  ctx.strokeStyle = 'rgba(0,255,170,0.35)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4,4]);
+  ctx.beginPath();
+  ctx.moveTo(0,h/2); ctx.lineTo(w,h/2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // axis labels (subtle ticks)
+  ctx.fillStyle = 'rgba(125,255,90,0.4)';
+  ctx.font = "9px 'JetBrains Mono', monospace";
+  for(let i=0;i<=cols;i+=4){
+    const x = (i/cols)*w;
+    ctx.fillText((i*50).toString(), x+2, h-3);
+  }
+  const yMax = calcYMax();  // 共通yMax計算
+  ctx.fillText('+' + (yMax>=10000 ? Math.floor(yMax/1000)+'k' : yMax), 4, 12);
+  ctx.fillText('-' + (yMax>=10000 ? Math.floor(yMax/1000)+'k' : yMax), 4, h-12);
+
+  // Slump line
+  if(state.diffHistory.length > 0){
+    const displayMaxX = calcDisplayMaxX();  // 共通: 右10%余白込み
+    const yScale = h/2 / yMax;
+
+    const xy = (pt) => {
+      const x = isFinite(pt.x) && displayMaxX > 0 ? (pt.x / displayMaxX) * w : 0;  // 統一スケール
+      const y = isFinite(pt.y) && isFinite(yScale) ? Math.max(2, Math.min(h-2, h/2 - pt.y * yScale)) : h/2;
+      return {x: isFinite(x)?x:0, y: isFinite(y)?y:h/2};
+    };
+
+    // Glow line (multiple passes for neon effect)
+    const passes = [
+      {color:'rgba(0,255,170,0.10)', width:10},
+      {color:'rgba(0,207,255,0.22)', width:6},
+      {color:'rgba(0,207,255,1.0)', width:2.0},
+    ];
+
+    // 間引きサンプリング: 山・谷を必ず含め最大600点
+    const hist = state.diffHistory;
+    const MAX_PTS = 600;
+    let sampled;
+    if(hist.length <= MAX_PTS){
+      sampled = hist;
+    } else {
+      const step = Math.floor(hist.length / MAX_PTS);
+      // 山・谷インデックスのセット（高速化: 逐次判定）
+      const peakSet = new Set();
+      for(let i=step; i<hist.length-step; i+=step){
+        const prev=hist[i-step].y, cur=hist[i].y, next=hist[i+step].y;
+        if((prev<cur&&cur>next)||(prev>cur&&cur<next)) peakSet.add(i);
+      }
+      sampled = [];
+      for(let i=0; i<hist.length; i+=step) sampled.push(hist[i]);
+      // 最後の点を追加
+      if(sampled[sampled.length-1] !== hist[hist.length-1]) sampled.push(hist[hist.length-1]);
+    }
+
+    passes.forEach(pass=>{
+      ctx.strokeStyle = pass.color;
+      ctx.lineWidth = pass.width;
+      ctx.lineJoin='round';
+      ctx.lineCap='round';
+      ctx.beginPath();
+      sampled.forEach((p,i)=>{
+        const {x,y} = xy(p);
+        if(i===0) ctx.moveTo(x,y);
+        else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+    });
+
+    // hitMarks描画なし: 当たりは花火演出のみで表現
+
+    // 全カクカク点ポインタ描画（吸着点と完全一致）
+    // ※以前は間引き後のsampledで山/谷だけ判定していたため、山にポインタが出ないケースがあった。
+    //   getGraphPointers()で作った全アンカーをそのまま描画し、見た目と吸着先を一致させる。
+    const ptrsForDraw = getGraphPointers();
+    ptrsForDraw.forEach((pt)=>{
+      const {x:px, y:py} = graphXY(pt, w, h);
+      if(!isFinite(px) || !isFinite(py)) return;
+      const isPeak = pt.kind === 'peak';
+      const isValley = pt.kind === 'valley';
+      const isCurrent = pt.kind === 'current';
+      const isStart = pt.kind === 'start';
+      if(isStart || isCurrent) return; // 専用マーカーを別描画
+
+      const col = isPeak ? '#00ffaa' : (isValley ? '#ff1166' : '#d4a843');
+      const sz = isPeak || isValley ? 2.6 : 1.9;
+      ctx.fillStyle = col;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1;
+      ctx.shadowBlur = isPeak || isValley ? 8 : 5;
+      ctx.shadowColor = col;
+      ctx.beginPath();
+      if(isPeak){
+        ctx.moveTo(px, py - sz);
+        ctx.lineTo(px - sz, py + sz);
+        ctx.lineTo(px + sz, py + sz);
+      } else if(isValley){
+        ctx.moveTo(px, py + sz);
+        ctx.lineTo(px - sz, py - sz);
+        ctx.lineTo(px + sz, py - sz);
+      } else {
+        ctx.rect(px - sz, py - sz, sz * 2, sz * 2);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    });
+
+    // 開始点マーカー（ダイヤモンド型）
+    const startPt = xy(state.diffHistory[0]);
+    ctx.strokeStyle = 'rgba(125,255,90,0.9)';
+    ctx.fillStyle = 'rgba(125,255,90,0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const ds = 6;
+    ctx.moveTo(startPt.x, startPt.y - ds);
+    ctx.lineTo(startPt.x + ds, startPt.y);
+    ctx.lineTo(startPt.x, startPt.y + ds);
+    ctx.lineTo(startPt.x - ds, startPt.y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fill();
+    // ラベル
+    ctx.fillStyle = 'rgba(125,255,90,0.7)';
+    ctx.font = "9px 'JetBrains Mono',monospace";
+    // ラベルなし
+
+    // Current position marker (pulse)
+    const last = state.diffHistory[state.diffHistory.length-1];
+    const lp = xy(last);
+    ctx.strokeStyle = '#7dff5a';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(lp.x, lp.y, 4 + Math.sin(Date.now()/200)*1.5, 0, Math.PI*2);
+    ctx.stroke();
+
+    // 現在選択中の幾何学ポインタをハイライト表示
+    if(state.geometry && state.geometry.graphAnchorX !== undefined){
+      const geo = state.geometry;
+      [
+        {graphX: geo.graphAnchorX, graphY: geo.graphAnchorY, label:'ANCHOR'},
+        {graphX: geo.graphCenterX, graphY: geo.graphCenterY, label:'CENTER'},
+      ].forEach((pt, ii)=>{
+        const pp = xy({x: pt.graphX, y: pt.graphY});
+        ctx.strokeStyle = ii===0 ? 'rgba(255,215,140,0.9)' : 'rgba(200,60,255,0.9)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3,2]);
+        ctx.beginPath();
+        ctx.arc(pp.x, pp.y, 3, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = ii===0 ? 'rgba(255,215,140,0.8)' : 'rgba(200,60,255,0.8)';
+        ctx.font = "9px 'JetBrains Mono',monospace";
+        ctx.fillText(pt.label, pp.x+12, pp.y);
+      });
+    } else if(state.geometry && state.geometry.graphAnchorIdx !== undefined){
+      // 旧形式フォールバック
+      const ptrs = getGraphPointers();
+      [state.geometry.graphAnchorIdx, state.geometry.graphCenterIdx].forEach((idx, ii)=>{
+        if(idx < 0 || !ptrs[idx]) return;
+        const pp = xy({x:ptrs[idx].graphX, y:ptrs[idx].graphY});
+        ctx.strokeStyle = ii===0 ? 'rgba(255,215,140,0.9)' : 'rgba(177,77,255,0.9)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3,2]);
+        ctx.beginPath();
+        ctx.arc(pp.x, pp.y, 3, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = ii===0 ? 'rgba(255,215,140,0.8)' : 'rgba(177,77,255,0.8)';
+        ctx.font = "9px 'JetBrains Mono',monospace";
+        ctx.fillText(ii===0?'ANCHOR':'CENTER', pp.x+12, pp.y);
+      });
+    }
+  }
+
+  // Frame corners
+  ctx.strokeStyle = 'rgba(125,255,90,0.6)';
+  ctx.lineWidth = 1;
+  const cl=12;
+  // 4 corners brackets
+  ctx.beginPath();
+  ctx.moveTo(0,cl); ctx.lineTo(0,0); ctx.lineTo(cl,0);
+  ctx.moveTo(w-cl,0); ctx.lineTo(w,0); ctx.lineTo(w,cl);
+  ctx.moveTo(w,h-cl); ctx.lineTo(w,h); ctx.lineTo(w-cl,h);
+  ctx.moveTo(cl,h); ctx.lineTo(0,h); ctx.lineTo(0,h-cl);
+  ctx.stroke();
+}
+
+// animate slump for pulse effect
+function animLoop(){
+  // graphDirty フラグが立っているときだけ再描画（パフォーマンス最適化）
+  if(state.graphDirty && state.diffHistory.length>0){
+    drawSlumpGraph();
+    state.graphDirty = false;
+  }
+  // パーティクルは毎フレーム
+  if(state.particles && state.particles.length>0){
+    const DPR=window.devicePixelRatio||1;
+    fxctx.clearRect(0,0,fxCanvas.width,fxCanvas.height);
+    for(let i=state.particles.length-1;i>=0;i--){
+      const p=state.particles[i];
+      p.x+=p.vx; p.y+=p.vy; p.life-=0.012; p.r*=0.993;
+      if(p.life<=0){state.particles.splice(i,1);continue;}
+      fxctx.globalAlpha=Math.max(0,p.life);
+      fxctx.fillStyle=p.c; fxctx.shadowColor=p.c; fxctx.shadowBlur=14*DPR;
+      fxctx.beginPath(); fxctx.arc(p.x,p.y,p.r,0,Math.PI*2); fxctx.fill();
+    }
+    fxctx.globalAlpha=1; fxctx.shadowBlur=0;
+    if(state.particles.length===0) fxctx.clearRect(0,0,fxCanvas.width,fxCanvas.height);
+  }
+  requestAnimationFrame(animLoop);
+}
+
+function calcDisplayMaxX(){
+  // drawSlumpGraph・graphXY・burstSacredOnGraph で共通使用
+  // 右側10%余白を含む表示用スケール
+  if(state.diffHistory.length === 0) return 800;
+  const last = state.diffHistory[state.diffHistory.length-1];
+  const rawMax = Math.max(800, last.x + 50);
+  return rawMax / 0.90;
+}
+
+function calcYMax(){
+  // キャッシュを返す。pushDiffPoint で逐次更新されるため毎回全スキャン不要。
+  return state._yMaxCache || 1000;
+}
+function _updateYMaxCache(diff){
+  if(diff < state._yMinVal) state._yMinVal = diff;
+  if(diff > state._yMaxVal) state._yMaxVal = diff;
+  const visAbs = Math.max(Math.abs(state._yMinVal), Math.abs(state._yMaxVal), 1);
+  const niceSteps = [500,1000,2000,3000,5000,7500,10000,15000,20000,30000,50000,100000];
+  state._yMaxCache = niceSteps.find(s => s >= visAbs * 1.20) || visAbs * 1.25;
+}
+
+// ==================== SACRED GEOMETRY ====================
+// Metatron-style 13 circle structure with connecting lines
+function drawGeometry(){
+  const w = geoCanvas.getBoundingClientRect().width;
+  const h = geoCanvas.getBoundingClientRect().height;
+  geoctx.clearRect(0,0,w,h);
+
+  // Show temp anchor (tap1 = edge point) waiting for tap2 (center)
+  if(state.geoTempCenter){
+    const {cx,cy} = state.geoTempCenter;
+    // pulsing ring
+    const t = Date.now()/180;
+    geoctx.strokeStyle = 'rgba(255,215,140,0.85)';
+    geoctx.lineWidth = 1.4;
+    geoctx.beginPath();
+    geoctx.arc(cx,cy,5 + Math.sin(t)*2, 0, Math.PI*2);
+    geoctx.stroke();
+    // outer expanding ring
+    geoctx.strokeStyle = 'rgba(255,215,140,' + (0.4 - (Math.sin(t)+1)*0.1) + ')';
+    geoctx.lineWidth = 1;
+    geoctx.beginPath();
+    geoctx.arc(cx,cy, 12 + Math.sin(t)*4, 0, Math.PI*2);
+    geoctx.stroke();
+    // inner dot
+    geoctx.fillStyle = 'rgba(255,215,140,0.95)';
+    geoctx.beginPath();
+    geoctx.arc(cx,cy,1.8,0,Math.PI*2);
+    geoctx.fill();
+    // small label
+    geoctx.fillStyle = 'rgba(255,215,140,0.7)';
+    geoctx.font = "9px 'JetBrains Mono', monospace";
+    geoctx.fillText('EDGE', cx + 8, cy - 6);
+  }
+
+  if(!state.geometry) return;
+
+  // グラフ座標から最新のpx座標を毎回計算（スケール変化に追従）
+  let cx, cy, r, anchorAngle;
+  const geo = state.geometry;
+  if(geo.graphAnchorX !== undefined && geo.graphCenterX !== undefined){
+    // ★ 保存したグラフ座標値(graphX/Y)を直接graphXY()に渡してpxへ変換
+    // インデックスを使わないのでポインタ数変化やスケール変化に完全追従
+    const aPt = {graphX: geo.graphAnchorX, graphY: geo.graphAnchorY};
+    const cPt = {graphX: geo.graphCenterX, graphY: geo.graphCenterY};
+    const axy = graphXY(aPt, w, h);
+    const cxy = graphXY(cPt, w, h);
+    cx = cxy.x; cy = cxy.y;
+    const dx = axy.x - cxy.x, dy = axy.y - cxy.y;
+    r = Math.max(10, Math.sqrt(dx*dx+dy*dy));
+    anchorAngle = Math.atan2(dy, dx);
+    // stateも更新（anchor表示用）
+    geo.cx = cx; geo.cy = cy; geo.r = r; geo.anchorAngle = anchorAngle;
+    geo.anchor = {x: axy.x, y: axy.y};
+  } else if(geo.graphAnchorIdx !== undefined && geo.graphCenterIdx !== undefined){
+    // 旧インデックス形式フォールバック（互換）
+    const ptrs = getGraphPointers();
+    const aPt = ptrs[geo.graphAnchorIdx] || ptrs[0] || {graphX:0,graphY:0};
+    const cPt = ptrs[geo.graphCenterIdx] || ptrs[0] || {graphX:0,graphY:0};
+    const axy = graphXY(aPt, w, h);
+    const cxy = graphXY(cPt, w, h);
+    cx = cxy.x; cy = cxy.y;
+    const dx = axy.x - cxy.x, dy = axy.y - cxy.y;
+    r = Math.max(10, Math.sqrt(dx*dx+dy*dy));
+    anchorAngle = Math.atan2(dy, dx);
+    geo.cx = cx; geo.cy = cy; geo.r = r; geo.anchorAngle = anchorAngle;
+    geo.anchor = {x: axy.x, y: axy.y};
+  } else {
+    // 最終フォールバック
+    cx = geo.cx; cy = geo.cy; r = geo.r; anchorAngle = geo.anchorAngle;
+  }
+
+  const baseAngle = anchorAngle !== undefined ? anchorAngle : 0;
+
+  const points = [{x:cx, y:cy}];
+  for(let i=0; i<6; i++){
+    const a = baseAngle + i * Math.PI/3;
+    points.push({x: cx + r*Math.cos(a), y: cy + r*Math.sin(a)});
+  }
+  for(let i=0; i<6; i++){
+    const a = baseAngle + (i * Math.PI/3) + Math.PI/6;
+    const dist = r * Math.sqrt(3);
+    points.push({x: cx + dist*Math.cos(a), y: cy + dist*Math.sin(a)});
+  }
+
+  geoctx.save();
+  geoctx.globalCompositeOperation = 'screen';
+
+  // Connection lines (every pair)
+  geoctx.strokeStyle = 'rgba(255,215,140,0.18)';
+  geoctx.lineWidth = 0.7;
+  for(let i=0;i<points.length;i++){
+    for(let j=i+1;j<points.length;j++){
+      geoctx.beginPath();
+      geoctx.moveTo(points[i].x, points[i].y);
+      geoctx.lineTo(points[j].x, points[j].y);
+      geoctx.stroke();
+    }
+  }
+
+  // Highlighted core lines (golden)
+  geoctx.strokeStyle = 'rgba(255,215,140,0.6)';
+  geoctx.lineWidth = 1.2;
+  for(let i=1;i<=6;i++){
+    geoctx.beginPath();
+    geoctx.moveTo(points[0].x, points[0].y);
+    geoctx.lineTo(points[i].x, points[i].y);
+    geoctx.stroke();
+  }
+  // Hexagon ring connection
+  geoctx.strokeStyle = 'rgba(125,255,90,0.5)';
+  geoctx.lineWidth = 1.2;
+  geoctx.beginPath();
+  for(let i=1;i<=6;i++){
+    const next = i===6 ? 1 : i+1;
+    if(i===1) geoctx.moveTo(points[i].x,points[i].y);
+    geoctx.lineTo(points[next].x, points[next].y);
+  }
+  geoctx.stroke();
+
+  // 13 circles
+  points.forEach((p,idx)=>{
+    // outer glow (座標・半径が有限値の場合のみ)
+    if(isFinite(p.x) && isFinite(p.y) && isFinite(r) && r > 0){
+      const grad = geoctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*1.1);
+      grad.addColorStop(0, idx===0 ? 'rgba(255,215,140,0.35)' : 'rgba(177,77,255,0.18)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      geoctx.fillStyle = grad;
+      geoctx.beginPath();
+      geoctx.arc(p.x, p.y, r*1.1, 0, Math.PI*2);
+      geoctx.fill();
+    }
+  });
+
+  points.forEach((p,idx)=>{
+    geoctx.strokeStyle = idx===0 ? 'rgba(255,215,140,0.9)' : 'rgba(220,255,200,0.55)';
+    geoctx.lineWidth = idx===0 ? 1.6 : 1;
+    geoctx.beginPath();
+    geoctx.arc(p.x, p.y, r, 0, Math.PI*2);
+    geoctx.stroke();
+  });
+
+  // Outer envelope ring
+  geoctx.strokeStyle = 'rgba(177,77,255,0.4)';
+  geoctx.lineWidth = 0.8;
+  geoctx.setLineDash([4,3]);
+  geoctx.beginPath();
+  geoctx.arc(cx, cy, r * (Math.sqrt(3)+1), 0, Math.PI*2);
+  geoctx.stroke();
+  geoctx.setLineDash([]);
+
+  // Center cross
+  geoctx.strokeStyle = 'rgba(255,215,140,0.9)';
+  geoctx.lineWidth = 1;
+  geoctx.beginPath();
+  geoctx.moveTo(cx-6, cy); geoctx.lineTo(cx+6, cy);
+  geoctx.moveTo(cx, cy-6); geoctx.lineTo(cx, cy+6);
+  geoctx.stroke();
+
+  // Anchor marker (TAP 1 = edge intersection of central circle)
+  if(state.geometry.anchor){
+    const a = state.geometry.anchor;
+    geoctx.strokeStyle = 'rgba(255,215,140,0.95)';
+    geoctx.lineWidth = 1.4;
+    geoctx.beginPath();
+    geoctx.arc(a.x, a.y, 4, 0, Math.PI*2);
+    geoctx.stroke();
+    geoctx.fillStyle = 'rgba(255,215,140,0.6)';
+    geoctx.beginPath();
+    geoctx.arc(a.x, a.y, 1.8, 0, Math.PI*2);
+    geoctx.fill();
+  }
+
+  // Label
+  geoctx.fillStyle = 'rgba(255,215,140,0.7)';
+  geoctx.font = "10px 'JetBrains Mono', monospace";
+  geoctx.fillText('METATRON-13', cx + r * (Math.sqrt(3)+1) + 4, cy);
+  geoctx.font = "9px 'Orbitron', sans-serif";
+  geoctx.fillText('R=' + r.toFixed(1), cx + r * (Math.sqrt(3)+1) + 4, cy + 12);
+
+  geoctx.restore();
+}
+
+// re-render geometry on animation frame for center pulse
+function geoLoop(){
+  if(state.geoTempCenter || state.geometry){
+    drawGeometry();
+  }
+  requestAnimationFrame(geoLoop);
+}
+
+// ==================== TAP HANDLING ====================
+function getTapPos(evt){
+  const rect = geoCanvas.getBoundingClientRect();
+  const cx = (evt.touches ? evt.touches[0].clientX : evt.clientX) - rect.left;
+  const cy = (evt.touches ? evt.touches[0].clientY : evt.clientY) - rect.top;
+  return {cx, cy};
+}
+
+// グラフ座標をポインタリストに変換（開始点 + 見えている折れ線の曲がり点 + 現在点）
+// 重要: 全履歴点をアンカー化しない。数万回転でも重くならないよう、線の方向が変わる点だけ残す。
+function getGraphPointers(){
+  const h = state.diffHistory;
+  if(!h || h.length === 0) return [];
+
+  const ptrs = [];
+  const seen = new Set();
+
+  function addRawPoint(pt, kind, histIndex){
+    if(!pt || !isFinite(pt.x) || !isFinite(pt.y)) return;
+    const key = pt.x + ':' + pt.y;
+    if(seen.has(key)) return;
+    seen.add(key);
+    ptrs.push({graphX: pt.x, graphY: pt.y, kind, histIndex});
+  }
+
+  function vectorKind(a, b){
+    if(!a || !b) return 'flat';
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    if(Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9) return 'flat';
+    if(Math.abs(dx) < 1e-9) return dy > 0 ? 'up' : 'down';
+    const slope = dy / dx;
+    if(Math.abs(slope) < 1e-9) return 'flat';
+    return slope > 0 ? 'up' : 'down';
+  }
+
+  function classifyByNeighbors(prev, cur, next){
+    if(!prev || !next) return 'turn';
+    const inDir = vectorKind(prev, cur);
+    const outDir = vectorKind(cur, next);
+    if(inDir === 'up' && outDir === 'down') return 'peak';
+    if(inDir === 'down' && outDir === 'up') return 'valley';
+    return 'turn';
+  }
+
+  // 同一点の連続重複だけ先に消す。
+  // ここで「全点」を保持しないことで、通常時の長いハマり下降を1本の線として扱える。
+  const compact = [];
+  for(let i=0; i<h.length; i++){
+    const pt = h[i];
+    if(!pt || !isFinite(pt.x) || !isFinite(pt.y)) continue;
+    const last = compact[compact.length - 1];
+    if(last && last.x === pt.x && last.y === pt.y) continue;
+    compact.push({x:pt.x, y:pt.y, histIndex:i});
+  }
+  if(compact.length === 0) return [];
+
+  addRawPoint(compact[0], 'start', compact[0].histIndex);
+
+  // 方向が変わる境界だけを残す。
+  // これで「当たる前の安値」「ハマる前の高値」のような古い中間点を量産せず、
+  // 実際に折れ線がカクッと変わった直近の山・谷だけが吸着対象になる。
+  let runStart = 0;
+  let prevDir = 'flat';
+
+  for(let i=1; i<compact.length; i++){
+    const dir = vectorKind(compact[i-1], compact[i]);
+    if(dir === 'flat') continue;
+
+    if(prevDir === 'flat'){
+      prevDir = dir;
+      continue;
+    }
+
+    if(dir !== prevDir){
+      const turnIdx = i - 1;
+      const prevPt = compact[Math.max(runStart, turnIdx - 1)];
+      const curPt  = compact[turnIdx];
+      const nextPt = compact[i];
+      addRawPoint(curPt, classifyByNeighbors(prevPt, curPt, nextPt), curPt.histIndex);
+      runStart = turnIdx;
+      prevDir = dir;
+    }
+  }
+
+  const last = compact[compact.length - 1];
+  addRawPoint(last, 'current', last.histIndex);
+
+  // 近すぎる同種の山谷が連続した場合は、後発の直近点を優先して軽量化する。
+  // 例: 当たり/ハマり切替直前に出る古い低値・高値を捨て、切替後の直近アンカーを残す。
+  const reduced = [];
+  for(const p of ptrs){
+    const lastP = reduced[reduced.length - 1];
+    if(lastP && lastP.kind === p.kind && (p.kind === 'peak' || p.kind === 'valley')){
+      reduced[reduced.length - 1] = p;
+    } else {
+      reduced.push(p);
+    }
+  }
+
+  reduced.sort((a,b)=> (a.graphX - b.graphX) || (a.graphY - b.graphY));
+  return reduced;
+}
+
+// グラフCanvas上のxy()変換関数を外部から使えるように
+function graphXY(graphPt, w, h){
+  if(state.diffHistory.length === 0) return {x:0,y:h/2};
+  const yMax = calcYMax();  // 共通yMax計算
+  const dMaxX = calcDisplayMaxX();  // drawSlumpGraphと同一スケール
+  const yScale = h/2 / yMax;
+  const rx = isFinite(graphPt.graphX) && dMaxX > 0 ? (graphPt.graphX / dMaxX) * w : 0;
+  const ry = isFinite(graphPt.graphY) && isFinite(yScale)
+    ? Math.max(2, Math.min(h-2, h/2 - graphPt.graphY * yScale))
+    : h/2;
+  return {
+    x: isFinite(rx) ? rx : 0,
+    y: isFinite(ry) ? ry : h/2
+  };
+}
+
+// タップ位置に最も近いポインタのインデックスを返す（getGraphPointers()の配列インデックス）
+function nearestPointerIdx(tapX, tapY, w, h, excludeIdx=-1){
+  const ptrs = getGraphPointers();
+  if(ptrs.length === 0) return -1;
+  let bestIdx = -1, bestDist = Infinity;
+  ptrs.forEach((p, i)=>{
+    if(i === excludeIdx) return;  // TAP1で選んだ点を除外
+    const {x,y} = graphXY(p, w, h);
+    const d = Math.sqrt((tapX-x)**2 + (tapY-y)**2);
+    if(d < bestDist){ bestDist = d; bestIdx = i; }
+  });
+  // 吸着しきい値: 60px以内のポインタのみ（遠ければ -1）
+  return bestDist <= 60 ? bestIdx : -1;
+}
+
+function handleTap(evt){
+  evt.preventDefault();
+  initAudio();
+  const {cx, cy} = getTapPos(evt);
+  const w = geoCanvas.getBoundingClientRect().width;
+  const h = geoCanvas.getBoundingClientRect().height;
+
+  if(state.geoTapStage === 0){
+    // TAP 1: 始点 → 最寄りのポインタを選択
+    const idx = nearestPointerIdx(cx, cy, w, h);
+    state.geoTempCenter = {cx, cy, ptrIdx: idx};
+    state.geoTapStage = 1;
+    sfx.geoTap();
+    const ptrs = getGraphPointers();
+    const label = idx >= 0 && ptrs[idx] ? ptrs[idx].kind.toUpperCase() : '---';
+    flashTapInstr('始点: ' + label + ' → TAP 2: 終点を選択');
+    updateHUD();
+  } else if(state.geoTapStage === 1){
+    // TAP 2: 終点 → TAP1と異なるポインタに吸着（除外あり）
+    const anchorIdx = state.geoTempCenter.ptrIdx;
+    const idx2 = nearestPointerIdx(cx, cy, w, h, anchorIdx);  // anchorを除外
+
+    const ptrs = getGraphPointers();
+
+    function tapToGraphCoord(tapX, tapY){
+      const dMaxX = calcDisplayMaxX();
+      const yMax  = calcYMax();
+      const gx = (tapX / w) * dMaxX;
+      const gy = (h/2 - tapY) / (h/2) * yMax;
+      return { graphX: Math.round(gx), graphY: Math.round(gy) };
+    }
+
+    const aPt = (anchorIdx >= 0 && ptrs[anchorIdx])
+      ? ptrs[anchorIdx]
+      : tapToGraphCoord(state.geoTempCenter.cx, state.geoTempCenter.cy);
+    const cPt = (idx2 >= 0 && ptrs[idx2])
+      ? ptrs[idx2]
+      : tapToGraphCoord(cx, cy);
+
+    const axy = graphXY(aPt, w, h);
+    const cxy = graphXY(cPt, w, h);
+    const dx = axy.x - cxy.x, dy = axy.y - cxy.y;
+    const rPx = Math.max(10, Math.sqrt(dx*dx+dy*dy));
+    const angle = Math.atan2(dy, dx);
+
+    state.geometry = {
+      graphAnchorX: aPt.graphX,
+      graphAnchorY: aPt.graphY,
+      graphCenterX: cPt.graphX,
+      graphCenterY: cPt.graphY,
+      anchorAngle: angle,
+      cx: cxy.x, cy: cxy.y, r: rPx,
+      anchor: {x: axy.x, y: axy.y},
+    };
+    state.geoTempCenter = null;
+    state.geoTapStage = 0;
+    sfx.geoTap();
+    setTimeout(()=>sfx.geoTap(), 60);
+    setTimeout(()=>sfx.geoTap(), 120);
+    flashTapInstr('METATRON-13 描画完了', 1200);
+    drawGeometry();
+    updateHUD();
+  }
+}
+
+geoCanvas.addEventListener('click', handleTap);
+geoCanvas.addEventListener('touchstart', handleTap, {passive:false});
+
+function flashTapInstr(text, duration=2500){
+  const el = $('tapInstr');
+  if(el){ if(el.firstChild) el.firstChild.textContent = '※ '+text+' ※'; else el.textContent = '※ '+text+' ※'; }
+  el.classList.add('show');
+  clearTimeout(flashTapInstr._t);
+  flashTapInstr._t = setTimeout(()=>el.classList.remove('show'), duration);
+}
+
+// initial hint
+setTimeout(()=>flashTapInstr('TAP 1: ポインタ選択(始点) → TAP 2: ポインタ選択(中心)'), 800);
+
+// ==================== UI UPDATE ====================
+function updateUI(){
+  // Wallet表示はプレイヤー実所持玉（FREE auto時は変動しない）
+  const ballRounded = Math.floor(state.realBall);
+  $('walletValue').textContent = ballRounded.toLocaleString();
+  // 円換算（1玉 = 4円）
+  const yen = Math.floor(state.realBall * YEN_PER_BALL);
+  $('walletYen').textContent = '¥' + yen.toLocaleString() + ' (4円/玉)';
+
+  // 差玉はシミュレーション値（グラフと同じ）
+  const diff = Math.round(state.totalPayout - state.totalCost);
+  const diffStr = (diff>=0 ? '+' : '') + diff.toLocaleString();
+  $('hudDiff').textContent = diffStr;
+  $('hudSpin').textContent = String(state.spinCount).padStart(4,'0');
+
+// 円換算差玉
+  const diffYen = diff * YEN_PER_BALL;
+
+
+  $('hudMode').textContent = state.mode==='ST' ? 'ST' :
+    state.mode==='HC' ? 'HC' :
+    state.mode==='JITAN' ? '時短' :
+    state.mode==='YUTAI' ? '遊タイム' : 'NORMAL';
+
+  // BGMをモードに合わせて切り替え
+  if(audioCtx){
+    const bgmMode = (state.mode==='HC') ? 'ST' : (state.mode==='YUTAI') ? 'JITAN' : state.mode;
+    switchBGM(bgmMode);
+  }
+
+
+ else if(state.mode === 'ST'){  } else {  }
+
+  // Auto buttons label
+  const fMain = $('btnAutoFreeMain'), fSub = $('btnAutoFreeSub');
+  const bMain = $('btnAutoBetMain'),  bSub = $('btnAutoBetSub');
+  const bFree = $('btnAutoFree'), bBet = $('btnAutoBet');
+
+  if(state.freeAutoLocked){
+    // ロック中: 両ボタンをグレーアウト + ロック表示
+    if(fMain){ fMain.textContent = '通常オート'; fSub.textContent = '⚠ LOCKED (時短/ST中)'; }
+    if(bMain){ bMain.textContent = '賭けオート'; bSub.textContent = '⚠ LOCKED'; }
+    if(bFree){ bFree.disabled = true; bFree.classList.remove('armed'); }
+    if(bBet) { bBet.disabled  = true; bBet.classList.remove('armed'); }
+  } else {
+    if(fMain){
+      if(state.autoMode === 'FREE'){
+        fMain.textContent = '通常オート停止';
+        fSub.textContent = 'FREE : RUNNING ●';
+        bFree.classList.add('armed');
+      } else {
+        fMain.textContent = '通常オート';
+        fSub.textContent = 'FREE AUTO (玉消費なし)';
+        bFree.classList.remove('armed');
+      }
+      if(bFree) bFree.disabled = false;
+    }
+    if(bMain){
+      if(state.autoMode === 'BET'){
+        bMain.textContent = '賭けオート停止';
+        bSub.textContent = 'BET : RUNNING ●';
+        bBet.classList.add('armed');
+      } else {
+        bMain.textContent = '賭けオート';
+        bSub.textContent = 'BET AUTO (玉消費)';
+        bBet.classList.remove('armed');
+      }
+      if(bBet) bBet.disabled = false;
+    }
+  }
+
+  // ST/JITAN/HC/YUTAI HUD overlay
+  const lbl = $('rushLeftLabel');
+  if(state.mode === 'ST'){
+    $('rushCountRow').style.display = 'flex';
+    if(lbl) lbl.textContent = 'RUSH残';
+    $('rushLeft').textContent = state.stSpinsLeft;
+    $('rushOverlay').textContent = 'RUSH';
+    $('rushOverlay').classList.add('active');
+  } else if(state.mode === 'JITAN' || state.mode === 'HC'){
+    $('rushCountRow').style.display = 'flex';
+    if(lbl) lbl.textContent = '時短残';
+    $('rushLeft').textContent = state.jitanLeft;
+    $('rushOverlay').textContent = 'CHANCE';
+    $('rushOverlay').classList.add('active');
+  } else if(state.mode === 'YUTAI'){
+    $('rushCountRow').style.display = 'flex';
+    if(lbl) lbl.textContent = '遊タイム残';
+    $('rushLeft').textContent = state.jitanLeft;
+    $('rushOverlay').textContent = '遊タイム';
+    $('rushOverlay').classList.add('active');
+  } else {
+    $('rushCountRow').style.display = 'none';
+    $('rushOverlay').classList.remove('active');
+  }
+
+  if($('hudGeo')) $('hudGeo').textContent = state.geometry ? '◆' : '';
+
+  // Auto buttons. 賭けオートは実残高が足りない時は活性化させない（既にON中なら止められる）。
+  if(bFree) bFree.disabled = false;
+  if(bBet) bBet.disabled = false;
+
+  // reelSpinNum removed
+  // reelフレーム色: CSSクラスで制御（JSからのinlineスタイル廃止）
+  const reelPanel = document.querySelector('.reels-panel');
+  if(reelPanel){
+    reelPanel.classList.remove('mode-normal','mode-jitan','mode-rush');
+    if(state.mode==='ST') reelPanel.classList.add('mode-rush');
+    else if(state.mode==='JITAN'||state.mode==='HC') reelPanel.classList.add('mode-jitan');
+    else reelPanel.classList.add('mode-normal');
+  }
+
+  // 初当たりからのSPIN
+  if($('statusSpinSinceHit')){
+    $('statusSpinSinceHit').textContent = state.spinSinceHit.toLocaleString();
+  }
+
+
+  // Wallet色: 実持ち玉(realBall)の正負で決定（差玉でなく総残高）
+  const w = $('walletValue');
+  if(state.realBall > 0){ w.style.color = 'var(--amber)'; w.style.textShadow = '0 0 18px var(--amber),0 0 30px var(--amber)'; }
+  else if(state.realBall < 0){ w.style.color = 'var(--red)'; w.style.textShadow = '0 0 18px var(--red),0 0 30px var(--red)'; }
+  else { w.style.color = 'var(--bone)'; w.style.textShadow = '0 0 14px var(--green)'; }
+}
+
+function updateHUD(){
+  if($('hudGeo')) $('hudGeo').textContent = state.geometry ? '◆' : '';
+}
+
+// ==================== LOG ====================
+// Log panel removed; addLog kept as a no-op so existing call sites still work.
+function addLog(idx, msg, cls=''){ /* no-op */ }
+
+// ==================== GAME LOGIC ====================
+
+// generate 3 numbers for reel display
+// if hit: all same (zorome). Number weighted to give famous numbers higher chance
+function genReels(isHit){
+  if(isHit){
+    const hitNums = [1,3,5,7,2,4,6,8,9];
+    // 7,3,1 weighted higher
+    const weighted = [7,7,7,3,3,3,1,1,7,5,5,2,4,6,8,9,7];
+    const n = weighted[Math.floor(Math.random()*weighted.length)];
+    return [n,n,n];
+  } else {
+    // 3 numbers, avoid all same
+    let a, b, c;
+    do{
+      a = Math.floor(Math.random()*10);
+      b = Math.floor(Math.random()*10);
+      c = Math.floor(Math.random()*10);
+    } while(a===b && b===c);
+    return [a,b,c];
+  }
+}
+
+function rollHit(){
+  // 通常・時短・遊タイム: 同じ確率
+  return Math.random() < HIT_RATE;
+}
+
+// Animate reels then resolve
+function animateReels(finalNums, onDone){
+  // 即時解決版（リール演出なし・5倍速）
+  const reels = [$('reel0'),$('reel1'),$('reel2')];
+  const isHit = finalNums[0]===finalNums[1] && finalNums[1]===finalNums[2];
+  // モード別カラーを適用
+  const mCol = state.mode==='ST'?['#ffd700','0 0 16px #ffd700, 0 0 30px #ffb80088']:
+               (state.mode==='JITAN'||state.mode==='HC')?['#b388ff','0 0 14px #9d4edd, 0 0 26px #9d4edd88']:
+               ['#00e5a0','0 0 10px #00e5a088'];
+  reels.forEach((r,i)=>{
+    r.classList.remove('hit','miss','spinning');
+    r.textContent = finalNums[i];
+    r.style.color = mCol[0];
+    r.style.textShadow = mCol[1];
+    r.classList.add(isHit ? 'hit' : 'miss');
+  });
+  if(isHit){
+    const zCol = state.mode==='ST'?'#ffd700':state.mode==='JITAN'?'#b388ff':'#00e5a0';
+    reels.forEach(r=>{ r.style.color=zCol; r.style.textShadow=`0 0 24px ${zCol}, 0 0 48px ${zCol}`; });
+  }
+  onDone(isHit);
+}
+
+function pushDiffPoint(){
+  const diff = Math.round(state.totalPayout - state.totalCost);
+  state.diffHistory.push({x: state.spinCount, y: diff});
+  if(diff > state.maxDiff) state.maxDiff = diff;
+  if(diff < state.minDiff) state.minDiff = diff;
+  const dd = state.maxDiff - diff;
+  if(dd > state.maxDrawdown) state.maxDrawdown = dd;
+  _updateYMaxCache(diff);  // yMaxキャッシュを逐次更新
+  state.graphDirty = true;  // 再描画フラグ
+  return diff;
+}
+
+// コスト消費: 通常時のみ呼ばれる
+function applyCost(amount){
+  state.totalCost += amount;   // 差玉用累計
+  state.ball     -= amount;    // 表示用持ち玉
+  if(state.autoMode !== 'FREE'){
+    state.realBall -= amount;
+  }
+}
+
+// 払い出し: 当たり時に呼ばれる
+function applyPayout(amount){
+  state.totalPayout += amount; // 差玉用累計
+  state.ball        += amount; // 表示用持ち玉
+  if(state.autoMode !== 'FREE'){
+    state.realBall += amount;
+  }
+}
+
+// Continue auto-spin chain if active
+function maybeAutoNext(){
+  if(state.autoMode === 'OFF') return;
+  // BET: 通常時の実残高で玉切れ判定。FREE: シミュレーション残高で判定。
+  let canSpin;
+  if(state.mode !== 'NORMAL'){
+    canSpin = true;  // ST/JITAN/HC/YUTAI中は無料
+  } else if(state.autoMode === 'BET'){
+    canSpin = true; // マイナスでも継続
+  } else {
+    // FREE: シミュ残高がマイナスでも無限に回せる（検証用）
+    canSpin = true;
+  }
+  // マイナスでも継続（realBall<0でもOK）
+  const delay = (state.mode === 'JITAN' || state.mode === 'HC' || state.mode === 'YUTAI') ? 24 : 56;
+  setTimeout(()=> { if(state.autoMode !== 'OFF') doSpin(); }, delay);
+}
+
+// Main spin handler — NORMAL / JITAN / YUTAI goes through here. ST is runStCycle().
+function doSpin(){
+  if(state.isSpinning) return;
+  if(state.mode === 'ST') return;  // ST is auto
+  initAudio();
+
+  // コスト消費: 通常時のみ
+  if(state.mode === 'NORMAL'){
+    state.totalCost += COST_PER_SPIN;
+    state.ball      -= COST_PER_SPIN;
+    if(state.autoMode !== 'FREE') state.realBall -= COST_PER_SPIN;
+    state.spinCount++;
+    state.spinSinceHit++;
+    state.hamariCurrent++;
+    if(state.hamariCurrent > state.maxHamari) state.maxHamari = state.hamariCurrent;
+  } else if(state.mode === 'JITAN' || state.mode === 'HC'){
+    // 時短・HC: 玉消費なし、spinCount増やさない
+    state.jitanLeft--;
+  } else if(state.mode === 'YUTAI'){
+    // 遊タイム: 玉消費なし
+    state.jitanLeft--;
+  }
+
+  state.isSpinning = true;
+  sfx.spin();
+
+  const isHit = rollHit();
+  const nums = genReels(isHit);
+  updateUI();
+
+  animateReels(nums, (hit)=>{
+    const prevMode = state.mode;
+
+    if(hit){
+      // ===== 大当たり処理 =====
+      state.hits++;
+      state.hamariCurrent = 0;
+      state.spinSinceHit = 0;
+
+      // 振り分け
+      const hitKind = rollHitKind();
+      applyPayout(hitKind.payout);  // 持ち玉は先に加算（ウォレット表示用）
+      startHitOverlay(hitKind);     // ★グラフを演出画面で即座に覆う
+      sfx.hit();
+      fireRainbow();
+
+      // FREE AUTO中ならロック
+      if(state.autoMode === 'FREE') state.freeAutoLocked = true;
+
+      // ★ グラフ更新はガチャ演出が終わるまで行わない（ネタバレ防止）
+      // pushDiffPoint / hitMarks / drawSlumpGraph は onFinish の中で実行
+
+      // 振り分けモーダル表示してST突入
+      showHitModal(hitKind, ()=>{
+        const diff = pushDiffPoint();
+        state.hitMarks.push({x: state.spinCount, y: diff, kind: hitKind.kind});
+        drawSlumpGraph();
+        burstSacredOnGraph(hitKind, diff);  // ★ 初当たり花火
+
+        // ★ isRush で RUSH / チャンスタイム を分岐
+        if(hitKind.isRush){
+          state.mode = 'ST';
+          state.stSpinsLeft = ST_SPINS;
+          state.isHC = false;
+          state.stHits = 0;
+          fireFlash(); sfx.rush();
+          setTimeout(()=>fireRainbow(), 200);
+          updateUI(); drawSlumpGraph();
+          setTimeout(()=> runStCycle(hitKind), 56);
+        } else {
+          state.mode = 'JITAN';
+          state.jitanLeft = JITAN_SPINS;
+          state.isSpinning = false;   // ★ スピン完了フラグをリセット
+          sfx.rush();
+          updateUI(); drawSlumpGraph();
+          maybeAutoNext();
+        }
+      });
+      return;
+    }
+
+    // ===== 外れ =====
+    // 時短/HC 終了判定
+    if((prevMode === 'JITAN' || prevMode === 'HC') && state.jitanLeft <= 0){
+      state.mode = 'NORMAL';
+      state.freeAutoLocked = false;
+      state.autoMode = 'OFF';  // 時短終了でオート停止
+      updateUI();
+    }
+    // 遊タイム 終了判定
+    if(prevMode === 'YUTAI' && state.jitanLeft <= 0){
+      state.mode = 'NORMAL';
+      state.freeAutoLocked = false;
+    }
+    // 遊タイム発動判定（通常時299ハマり）
+    if(state.mode === 'NORMAL' && state.hamariCurrent >= YUTAI_TRIGGER){
+      state.mode = 'YUTAI';
+      state.jitanLeft = YUTAI_SPINS;
+      state.hamariCurrent = 0;
+      if(state.autoMode === 'FREE') state.freeAutoLocked = true;
+      fireFlash(); sfx.rush();
+      updateUI();
+    }
+
+    // グラフ更新（通常外れのみ差玉変化）
+    if(prevMode === 'NORMAL'){
+      pushDiffPoint(); drawSlumpGraph();
+    }
+
+    state.isSpinning = false;
+    updateUI();
+    maybeAutoNext();
+  });
+}
+
+// ============== ST CYCLE (10回転固定) ==============
+// ST中1/19.5で当たり。当たればST継続+振り分け。
+// 10回全外れ → ST終了 → 時短へ移行（初当たり時の振り分けで決まる）
+function runStCycle(prevHitKind){
+  if(state.mode !== 'ST') return;
+  state.isSpinning = true;
+  updateUI();
+
+  // RUSH 157回消化で終了 → 通常へ
+  if(state.stSpinsLeft <= 0){
+    state.mode = 'NORMAL';
+    state.freeAutoLocked = false;
+    state.isSpinning = false;
+    pushDiffPoint(); drawSlumpGraph();
+    updateUI(); maybeAutoNext();
+    return;
+  }
+
+  const isHit = Math.random() < ST_HIT_RATE;
+  const nums = genReels(isHit);
+  state.stSpinsLeft--;
+
+  animateReels(nums, ()=>{
+    if(isHit){
+      // ★ RUSH中当たり: rollRushKind (2400/4800個) でRUSH継続
+      const rushKind = rollRushKind();
+      applyPayout(rushKind.payout);   // totalPayout に反映 → グラフ連動
+      sfx.rushHit(); fireRainbow();
+      if(rushKind.kind === 'rush_max'){
+        fireFlash();
+        setTimeout(()=>fireFlash(), 200);
+        setTimeout(()=>fireFlash(), 400);
+      }
+
+      const diff = pushDiffPoint();   // 差玉を記録
+      state.hitMarks.push({x: state.spinCount, y: diff, kind: rushKind.kind});
+      drawSlumpGraph();
+      burstSacredOnGraph(rushKind, diff);
+
+      // RUSH継続: 157回リセット
+      state.stSpinsLeft = ST_SPINS;
+      updateUI();
+      setTimeout(()=> runStCycle(prevHitKind), 30);
+    } else {
+      updateUI();
+      if(state.stSpinsLeft > 0){
+        setTimeout(()=> runStCycle(prevHitKind), 40);
+      } else {
+        // RUSH157回全消化 → 通常へ、オート停止
+        state.mode = 'NORMAL';
+        state.freeAutoLocked = false;
+        state.autoMode = 'OFF';   // ★ ラッシュ終了でオート停止
+        state.isSpinning = false;
+        pushDiffPoint(); drawSlumpGraph();
+        updateUI();
+        // maybeAutoNextは呼ばない（オート停止済み）
+      }
+    }
+  });
+}
+
+
+// ST終了後の時短移行
+function enterJitanAfterST(){}
+
+// ==================== HIT OVERLAY ====================
+// 当たり確定瞬間にfxCanvasでグラフを神聖演出画面で覆う
+let _overlayRafId = null;
+// hitOverlayOn removed
+
+function startHitOverlay(){}
+
+function stopHitOverlay(){}
+
+
+// burstSacredOnGraph: 当たり座標にシンプルな幾何学をフラッシュ
+function burstSacredOnGraph(hitKind, diffVal){
+  const gr = fxCanvas.getBoundingClientRect();
+  const FW = gr.width, FH = gr.height;
+  if(!FW||!FH) return;
+
+  let cx=FW*0.5, cy=FH*0.5;
+  if(state.diffHistory.length>0){
+    const last=state.diffHistory[state.diffHistory.length-1];
+    const bMaxX=calcDisplayMaxX(), yMax=calcYMax();
+    cx=(last.x/bMaxX)*FW;
+    cy=Math.max(4,Math.min(FH-4, FH/2-last.y/yMax*(FH/2)));
+  }
+
+  const CFG={
+    'rush_max':{col:'#d4a843',rings:5,dur:900},
+    'rush_std':{col:'#9d4edd',rings:3,dur:700},
+    'rush_sp': {col:'#d4a843',rings:5,dur:900},
+    'rush':    {col:'#9d4edd',rings:3,dur:700},
+    'jitan':   {col:'#38b0f0',rings:2,dur:550},
+    '10r':     {col:'#d4a843',rings:5,dur:900},
+    '6r':      {col:'#e03050',rings:3,dur:750},
+    '4r_sp':   {col:'#22dd88',rings:3,dur:650},
+    '4r':      {col:'#38b0f0',rings:2,dur:500},
+  };
+  const cfg=CFG[hitKind.kind]||CFG['4r'];
+  const col=cfg.col;
+  const cr=parseInt(col.slice(1,3),16),cg=parseInt(col.slice(3,5),16),cb=parseInt(col.slice(5,7),16);
+  const maxR=Math.min(FW,FH)*0.65;
+
+  const FRAMES=40;
+  const STEP=cfg.dur/FRAMES;
+  let frame=0;
+  if(burstSacredOnGraph._tid) clearInterval(burstSacredOnGraph._tid);
+
+  burstSacredOnGraph._tid = setInterval(()=>{
+    frame++;
+    const p=Math.min(frame/FRAMES,1);
+    const fade=Math.pow(1-p,1.4);
+    const scale=Math.pow(Math.min(p/0.35,1),0.5);
+    const R=maxR*scale;
+    fxctx.clearRect(0,0,FW*3,FH*3);
+    if(p>=1||fade<0.01){ fxctx.clearRect(0,0,FW*3,FH*3); clearInterval(burstSacredOnGraph._tid); return; }
+
+    fxctx.save();
+    fxctx.translate(cx,cy);
+    fxctx.shadowBlur=0;
+
+    // 衝撃波リング
+    for(let w=0;w<3;w++){
+      const wp=Math.min(1,p*2.2-w*0.4); if(wp<=0) continue;
+      const wr=maxR*wp*(0.35+w*0.22);
+      const wa=(1-wp)*0.5*fade;
+      if(!isFinite(wr)||wr<=0||wa<=0) continue;
+      fxctx.globalAlpha=wa;
+      fxctx.strokeStyle=`rgba(${cr},${cg},${cb},1)`;
+      fxctx.lineWidth=2-w*0.4;
+      fxctx.beginPath(); fxctx.arc(0,0,wr,0,Math.PI*2); fxctx.stroke();
+    }
+
+    fxctx.globalAlpha=fade;
+    for(let L=0;L<cfg.rings;L++){
+      const r=R*(0.22+L/cfg.rings*0.78);
+      if(!isFinite(r)||r<=0) continue;
+      const rot=p*(L%2===0?0.5:-0.4)*Math.PI+L*Math.PI/cfg.rings;
+      fxctx.save(); fxctx.rotate(rot);
+      fxctx.strokeStyle=L===0?`rgba(${cr},${cg},${cb},${0.9-L*0.15})`:`rgba(255,255,255,${(0.9-L*0.15)*0.5})`;
+      fxctx.lineWidth=1.4-L*0.18;
+      fxctx.beginPath();
+      for(let i=0;i<=6;i++){
+        const a=(i/6)*Math.PI*2-Math.PI/6;
+        i===0?fxctx.moveTo(Math.cos(a)*r,Math.sin(a)*r):fxctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);
+      }
+      fxctx.stroke();
+      if(L<2){
+        fxctx.strokeStyle=`rgba(${cr},${cg},${cb},${(0.9-L*0.15)*0.4})`;
+        fxctx.lineWidth=0.6;
+        for(let i=0;i<6;i++){
+          const a=(i/6)*Math.PI*2-Math.PI/6;
+          fxctx.beginPath();
+          fxctx.arc(Math.cos(a)*r,Math.sin(a)*r,r*0.5,0,Math.PI*2);
+          fxctx.stroke();
+        }
+      }
+      fxctx.restore();
+    }
+    const pr=R*0.06;
+    if(isFinite(pr)&&pr>0){
+      fxctx.fillStyle=`rgba(255,255,255,${fade*0.9})`;
+      fxctx.beginPath(); fxctx.arc(0,0,pr,0,Math.PI*2); fxctx.fill();
+    }
+    fxctx.restore();
+  }, STEP);
+}
+burstSacredOnGraph._tid = null;
+burstSacredOnGraph._raf=null;
+
+// ==================== EFFECTS ====================
+function fireFlash(){
+  const f = $('flash');
+  f.classList.remove('fire','rainbow');
+  void f.offsetWidth;
+  f.classList.add('fire');
+}
+
+// 虹色フラッシュ: 当たり時に画面全体 + リール
+function fireRainbow(){
+  const f = $('flash');
+  f.classList.remove('fire','rainbow');
+  void f.offsetWidth;
+  f.classList.add('rainbow');
+  [$('reel0'),$('reel1'),$('reel2')].forEach(r=>{
+    if(!r) return;
+    r.classList.remove('rainbow'); void r.offsetWidth; r.classList.add('rainbow');
+    setTimeout(()=>r.classList.remove('rainbow'), 1500);
+  });
+  const gw = $('graphWrap') || document.querySelector('.graph-wrap');
+  if(gw){ gw.classList.remove('rainbow'); void gw.offsetWidth; gw.classList.add('rainbow'); setTimeout(()=>gw.classList.remove('rainbow'), 1200); }
+  fireRainbowCanvas(true);
+  setTimeout(()=>f.classList.remove('rainbow'), 1200);
+}
+
+function fireRainbowCanvas(strong=false){
+  const w = fxCanvas.getBoundingClientRect().width;
+  const h = fxCanvas.getBoundingClientRect().height;
+  const ctx = fxctx;
+  let t = 0;
+  const alpha = strong ? 0.45 : 0.25;
+  const colors = [
+    `rgba(255,0,0,${alpha})`,`rgba(255,120,0,${alpha})`,`rgba(255,240,0,${alpha})`,
+    `rgba(0,255,100,${alpha})`,`rgba(0,180,255,${alpha})`,`rgba(0,0,255,${alpha})`,
+    `rgba(160,0,255,${alpha})`,`rgba(255,0,180,${alpha})`
+  ];
+  let ci = 0;
+  const frames = strong ? 20 : 12;
+  const interval = strong ? 60 : 80;
+  if(fireRainbowCanvas._id) clearInterval(fireRainbowCanvas._id);
+  fireRainbowCanvas._id = setInterval(()=>{
+    ctx.clearRect(0,0,w*3,h*3);
+    const grad = ctx.createRadialGradient(w/2,h/2,0,w/2,h/2,Math.max(w,h)*0.7);
+    grad.addColorStop(0, colors[ci%colors.length]);
+    grad.addColorStop(0.5, colors[(ci+2)%colors.length]);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle=grad; ctx.fillRect(0,0,w,h);
+    ci++; t++;
+    if(t>=frames){ ctx.clearRect(0,0,w*3,h*3); clearInterval(fireRainbowCanvas._id); }
+  }, interval);
+}
+fireRainbowCanvas._id = null;
+
+// キャラクター表示
+// mode: 'normal-hit' | 'jitan-entry' | 'rush-entry' | 'rush-hit'
+
+
+// コイントスの少年アニメ
+function animateCoinBoy(flipping){ /* removed */ }
+
+function flashWallet(dir){
+  const w = $('walletValue');
+  w.classList.remove('up','down');
+  void w.offsetWidth;
+  w.classList.add(dir);
+  setTimeout(()=>w.classList.remove(dir), 1000);
+}
+
+// ==================== 大当たり振り分けモーダル ====================
+// ===== ガチャ演出強化版 =====
+// ラウンドが目まぐるしく切り替わってから停止する中毒性の高い演出
+// ─── 神聖幾何学シンボルをcanvasで描く ───
+// kind ごとに図形の複雑さ・色・輝きで分別（テキスト一切なし）
+function drawSacredSymbol(){}
+
+function showHitModal(hitKind,onFinish){
+  if(onFinish)onFinish();
+}
+
+// バイブレーション（ランク別強度）
+function triggerVibration(kind){
+  if(!navigator.vibrate) return;
+  if(kind==='10r')     navigator.vibrate([300,60,200,60,300,60,500]);
+  else if(kind==='6r') navigator.vibrate([150,50,250,50,150]);
+  else if(kind==='4r_sp') navigator.vibrate([100,40,150,40,100]);
+  else                 navigator.vibrate([60,30,80]);
+}
+
+
+
+
+// ==================== AUTO HANDLERS ====================
+// 通常オート（賭け無し）: 玉を消費せずひたすら回す。当たり判定は行う。
+function doAutoFree(){
+  if(state.freeAutoLocked) return;
+  initAudio(); sfx.btn();
+  if(state.autoMode === 'FREE'){
+    // 停止
+    state.autoMode = 'OFF'; updateUI(); return;
+  }
+  // BET起動中は切り替え不可（停止のみ受け付ける）
+  if(state.autoMode === 'BET') return;
+  state.autoMode = 'FREE';
+  updateUI();
+  if(!state.isSpinning && state.mode !== 'ST') doSpin();
+}
+
+function doAutoBet(){
+  if(state.freeAutoLocked) return;
+  initAudio(); sfx.btn();
+  if(state.autoMode === 'BET'){
+    // 停止
+    state.autoMode = 'OFF'; updateUI(); return;
+  }
+  // FREE起動中は切り替え不可（停止のみ受け付ける）
+  if(state.autoMode === 'FREE') return;
+  state.autoMode = 'BET';
+  updateUI();
+  if(!state.isSpinning && state.mode !== 'ST') doSpin();
+}
+
+// ==================== RESET ====================
+function fullReset(){
+  if(!confirm('全データをリセットしますか？')) return;
+  initAudio();
+  sfx.btn();
+  state.ball = INIT_BALL;
+  state.realBall = INIT_BALL;
+  state.totalCost = 0;
+  state.totalPayout = 0;
+  state.spinCount = 0;
+  state.spinSinceHit = 0;
+  state.hits = 0;
+  state.stEntries = 0;
+  state.stHits = 0;
+  state.stSpinsLeft = 0;
+  state.premiumHits = 0;
+  state.mode = 'NORMAL';
+  state.jitanLeft = 0;
+  state.autoMode = 'OFF';
+  state.freeAutoLocked = false;
+  state.isHC = false;
+  state.isSpinning = false;
+  state.diffHistory = [{x:0,y:0}];
+  state.hitMarks = [];
+  state.maxDiff = 0;
+  state.minDiff = 0;
+  state._yMaxCache = 1000;
+  state._yMinVal = 0;
+  state._yMaxVal = 0;
+  state.graphDirty = true;
+  state.maxDrawdown = 0;
+  state.hamariCurrent = 0;
+  state.maxHamari = 0;
+  $('reel0').textContent='-'; $('reel1').textContent='-'; $('reel2').textContent='-';
+  $('reel0').className='reel'; $('reel1').className='reel'; $('reel2').className='reel';
+  if($('reelTagline')) $('reelTagline').textContent='';
+  drawSlumpGraph();
+  updateUI();
+}
+
+// Add balls without affecting the slump graph.
+// 差玉(=ball - invested)を一定に保つため、ball/realBallを増やすのと同時に
+// invested/realInvestedも同額減算（=オフセット）。グラフには新しい点を打たない。
+function addBalls(amount){
+  initAudio();
+  sfx.btn();
+  // graphDiffには反映しない（追加玉はスランプグラフに影響しない）
+  state.realBall += amount;
+  state.ball += amount;
+  updateUI();
+}
+
+function geoReset(){
+  initAudio();
+  sfx.btn();
+  state.geometry = null;
+  state.geoTempCenter = null;
+  state.geoTapStage = 0;
+  geoctx.clearRect(0,0,geoCanvas.width,geoCanvas.height);
+  flashTapInstr('幾何学 クリア', 1500);
+  addLog('GEO', '神聖幾何学 リセット', 'tag-violet');
+  updateHUD();
+}
+
+// ==================== EVENTS ====================
+$('btnAutoFree').addEventListener('click', doAutoFree);
+$('btnAutoBet').addEventListener('click', doAutoBet);
+$('btnGeoReset').addEventListener('click', geoReset);
+$('btnReset').addEventListener('click', fullReset);
+
+
+// Sound toggle
+$('soundToggle').addEventListener('click', ()=>{
+  state.soundOn = !state.soundOn;
+  initAudio();
+  if($('soundToggle')) $('soundToggle').textContent = state.soundOn ? '♪ SOUND : ON' : '♪ SOUND : OFF';
+  $('soundToggle').classList.toggle('off', !state.soundOn);
+  if(state.soundOn){
+    // BGM再開: 強制リセットして現在のモードで再構築
+    bgmCurrentMode = null;
+    bgmSwitching = false;
+    stopAllBGMNodes();
+    switchBGM(state.mode);
+  } else {
+    stopAllBGMNodes();
+  }
+});
+
+// Clock
+function tickClock(){
+  const d = new Date();
+  const t = d.toISOString().slice(11,19);
+  $('clockUTC').textContent = 'UTC ' + t;
+  setTimeout(tickClock, 1000);
+}
+tickClock();
+
+// ==================== INIT ====================
+window.addEventListener('load', ()=>{
+  resizeCanvases();
+  updateUI();
+  animLoop();
+  geoLoop();
+});
+// also resize after fonts load
+document.fonts && document.fonts.ready.then(resizeCanvases);
+
+</script>
+</body>
+</html>
