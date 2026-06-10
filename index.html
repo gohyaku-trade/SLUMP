@@ -840,8 +840,8 @@ const ST_SPINS        = 157;          // RUSH回転数（ロングST）
 const JITAN_SPINS     = 100;          // チャンスタイム(時短)回転数
 const YUTAI_TRIGGER   = 999999;       // 遊タイムなし（大きな値で実質無効）
 const YUTAI_SPINS     = 379;
-const SPINS_PER_250   = 17.9;         // 回転率 17.9回/250玉（ゼロサム理論値）
-const COST_PER_SPIN   = 13.97;        // 1回転あたり消費玉 ゼロサム理論値（5000万回転検証済）
+const SPINS_PER_250   = 16.4;         // 回転率 16.4回/250玉（時短引き戻しRUSH濃厚込みのゼロサム近似）
+const COST_PER_SPIN   = 15.22;        // 1回転あたり消費玉（時短引き戻しRUSH濃厚込みのゼロサム近似）
 const YEN_PER_BALL    = 4;
 const INIT_BALL       = 0;
 
@@ -2215,7 +2215,10 @@ function doSpin(){
       state.spinSinceHit = 0;
 
       // 振り分け
-      const hitKind = rollHitKind();
+      // 通常時はヘソ(特図1)振り分け。時短/HC/遊タイム中の大当たりはRUSH突入濃厚として処理。
+      const hitKind = (prevMode === 'JITAN' || prevMode === 'HC' || prevMode === 'YUTAI')
+        ? { kind:'jitan_rush', rate:1.000, payout:300, jitan:157, label:'時短引き戻し RUSH', isRush:true }
+        : rollHitKind();
       applyPayout(hitKind.payout);  // 持ち玉は先に加算（ウォレット表示用）
       startHitOverlay(hitKind);     // ★グラフを演出画面で即座に覆う
       sfx.hit();
