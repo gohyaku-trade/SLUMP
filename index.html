@@ -227,6 +227,27 @@ h1 .red{color:var(--red)}
 #geoCanvas{cursor:crosshair;z-index:2}
 #fxCanvas{pointer-events:none;z-index:3}
 
+/* Always-on I Ching cycle monitor */
+.bagua-aura{
+  position:absolute;
+  top:28px;
+  left:8px;
+  width:clamp(190px,25vw,260px);
+  aspect-ratio:1;
+  z-index:5;
+  pointer-events:none;
+  clip-path:polygon(12% 0,88% 0,100% 12%,100% 88%,88% 100%,12% 100%,0 88%,0 12%);
+  background:
+    radial-gradient(circle,rgba(10,4,26,.86) 0 45%,rgba(4,2,14,.62) 66%,rgba(4,2,14,.18) 72%,transparent 73%),
+    conic-gradient(from 22.5deg,rgba(212,168,67,.08),transparent 12.5%,rgba(157,78,221,.08) 25%,transparent 37.5%,rgba(0,229,160,.07) 50%,transparent 62.5%,rgba(157,78,221,.08) 75%,transparent 87.5%);
+  filter:drop-shadow(0 0 10px rgba(157,78,221,.24));
+  opacity:.94;
+}
+#baguaCanvas{width:100%;height:100%;display:block}
+@media(max-width:600px){
+  .bagua-aura{width:170px;top:26px;left:5px}
+}
+
 /* HUD overlay on graph */
 .graph-hud{
   position:absolute;inset:0;pointer-events:none;z-index:4;
@@ -728,6 +749,9 @@ h1 .red{color:var(--red)}
           <canvas id="graphCanvas"></canvas>
           <canvas id="geoCanvas"></canvas>
           <canvas id="fxCanvas"></canvas>
+          <div class="bagua-aura" aria-label="90G 180G 270G 八卦サイクル">
+            <canvas id="baguaCanvas"></canvas>
+          </div>
 
           <div class="graph-hud">
             <div class="hud-tl"><span class="v" id="hudSpin" style="opacity:0.45;font-size:11px">0000</span></div>
@@ -840,8 +864,15 @@ const ST_SPINS        = 157;          // RUSH回転数（ロングST）
 const JITAN_SPINS     = 100;          // チャンスタイム(時短)回転数
 const YUTAI_TRIGGER   = 999999;       // 遊タイムなし（大きな値で実質無効）
 const YUTAI_SPINS     = 379;
-const SPINS_PER_250   = 16.4;         // 回転率 16.4回/250玉（時短引き戻しRUSH濃厚込みのゼロサム近似）
-const COST_PER_SPIN   = 15.22;        // 1回転あたり消費玉（時短引き戻しRUSH濃厚込みのゼロサム近似）
+const RUSH_CYCLE_HIT  = 1 - Math.pow(1 - ST_HIT_RATE, ST_SPINS);
+const JITAN_HIT       = 1 - Math.pow(1 - HIT_RATE, JITAN_SPINS);
+const RUSH_AVG_PAYOUT = 0.005 * 4800 + 0.995 * 2400;
+const RUSH_START_EV   = RUSH_CYCLE_HIT * RUSH_AVG_PAYOUT / (1 - RUSH_CYCLE_HIT);
+const INITIAL_HIT_EV  = 0.005 * 1500 + 0.995 * 300
+                      + 0.505 * RUSH_START_EV
+                      + 0.495 * JITAN_HIT * (300 + RUSH_START_EV);
+const COST_PER_SPIN   = HIT_RATE * INITIAL_HIT_EV; // 約15.215568玉: 理論ゼロサム
+const SPINS_PER_250   = 250 / COST_PER_SPIN;       // 約16.43回/250玉
 const YEN_PER_BALL    = 4;
 const INIT_BALL       = 0;
 
@@ -857,6 +888,15 @@ const HIT_TABLE = [
   { kind:'rush',    rate:0.500, payout:300,  jitan:157, label:'2R RUSH',        isRush:true  },
   { kind:'jitan',   rate:0.495, payout:300,  jitan:100, label:'チャンスタイム', isRush:false },
 ];
+
+// 時短中の引き戻しは300玉獲得後、RUSHへ直行する。
+const JITAN_RUSH_HIT = {
+  kind:'rush',
+  payout:300,
+  jitan:157,
+  label:'時短引き戻し RUSH',
+  isRush:true,
+};
 
 // RUSH中（特図2）振り分け ─ 全てRUSH継続
 const RUSH_TABLE = [
@@ -910,9 +950,11 @@ const $ = (id) => document.getElementById(id);
 const graphCanvas = $('graphCanvas');
 const geoCanvas   = $('geoCanvas');
 const fxCanvas    = $('fxCanvas');
+const baguaCanvas = $('baguaCanvas');
 const gctx = graphCanvas.getContext('2d');
 const geoctx = geoCanvas.getContext('2d');
 const fxctx = fxCanvas.getContext('2d');
+const bagctx = baguaCanvas.getContext('2d');
 
 // ==================== AUDIO ====================
 let audioCtx = null;
@@ -1252,6 +1294,13 @@ function resizeCanvases(){
     c.height = rect.height * dpr;
     c.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
   });
+  {
+    const rect = baguaCanvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    baguaCanvas.width = Math.max(1, Math.round(rect.width * dpr));
+    baguaCanvas.height = Math.max(1, Math.round(rect.height * dpr));
+    bagctx.setTransform(dpr,0,0,dpr,0,0);
+  }
   drawSlumpGraph();
   drawGeometry();
 }
@@ -1491,6 +1540,223 @@ function drawSlumpGraph(){
   ctx.moveTo(w,h-cl); ctx.lineTo(w,h); ctx.lineTo(w-cl,h);
   ctx.moveTo(cl,h); ctx.lineTo(0,h); ctx.lineTo(0,h-cl);
   ctx.stroke();
+
+  drawBaguaAura();
+}
+
+// ==================== I CHING 90G / 180G / 270G ====================
+const BAGUA_CYCLES = [90, 180, 270];
+const BAGUA_TRI_WEIGHTS = [1, 1.27201964951, 1.61803398875];
+const BAGUA_PHI = 1.61803398875;
+const BAGUA_NAMES = ['坤','震','坎','兌','艮','離','巽','乾'];
+
+function baguaValueAt(game){
+  const hist = state.diffHistory;
+  if(!hist.length || game <= hist[0].x) return hist.length ? hist[0].y : 0;
+  if(game >= hist[hist.length-1].x) return hist[hist.length-1].y;
+
+  let lo = 0, hi = hist.length - 1;
+  while(lo + 1 < hi){
+    const mid = (lo + hi) >> 1;
+    if(hist[mid].x <= game) lo = mid;
+    else hi = mid;
+  }
+  while(lo + 1 < hist.length && hist[lo + 1].x <= game) lo++;
+  const a = hist[lo];
+  let next = lo + 1;
+  while(next < hist.length && hist[next].x === a.x) next++;
+  if(next >= hist.length) return a.y;
+  const b = hist[next];
+  const t = (game - a.x) / Math.max(1, b.x - a.x);
+  return a.y + (b.y - a.y) * Math.max(0, Math.min(1, t));
+}
+
+function baguaRange(startGame, endGame){
+  let high = Math.max(baguaValueAt(startGame), baguaValueAt(endGame));
+  let low = Math.min(baguaValueAt(startGame), baguaValueAt(endGame));
+  for(const pt of state.diffHistory){
+    if(pt.x < startGame) continue;
+    if(pt.x > endGame) break;
+    high = Math.max(high, pt.y);
+    low = Math.min(low, pt.y);
+  }
+  return {high, low};
+}
+
+function baguaMedian(values){
+  if(!values.length) return 1;
+  const sorted = values.slice().sort((a,b)=>a-b);
+  const m = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[m] : (sorted[m-1] + sorted[m]) / 2;
+}
+
+function calculateBaguaCycle(cycle){
+  const newest = state.spinCount;
+  const required = cycle * 6;
+  if(newest < required) return {cycle, ready:false, have:newest, required};
+
+  const lines = [];
+  for(let k=0;k<6;k++){
+    const start = newest - required + k * cycle;
+    const end = start + cycle;
+    const open = baguaValueAt(start);
+    const close = baguaValueAt(end);
+    const range = baguaRange(start, end);
+    lines.push({
+      bullish: close === open ? baguaValueAt(Math.max(0,end-1)) <= close : close > open,
+      body: Math.abs(close-open),
+      purity: Math.abs(close-open) / Math.max(1, range.high-range.low)
+    });
+  }
+
+  const baselineBodies = [];
+  const availableLookback = Math.min(200, newest-required);
+  for(let i=1;i<=availableLookback;i++){
+    baselineBodies.push(Math.abs(
+      baguaValueAt(newest-required-i+cycle) - baguaValueAt(newest-required-i)
+    ));
+  }
+  const medianBody = Math.max(1, baguaMedian(
+    baselineBodies.length ? baselineBodies : lines.map(line=>line.body)
+  ));
+
+  let lower = 0, upper = 0, lowerCapacity = 0, upperCapacity = 0;
+  let lowerIndex = 0, upperIndex = 0, hexIndex = 0;
+  lines.forEach((line,k)=>{
+    const ratio = line.body / medianBody;
+    line.sizeClass = ratio >= 1.5 ? 2 : ratio < 0.67 ? 0 : 1;
+    const magnitude = line.sizeClass === 2 ? 1.5 : line.sizeClass === 0 ? 0.6 : 1;
+    const value = (line.bullish ? 1 : -1) * magnitude * (0.25 + 0.75 * Math.min(1,line.purity));
+    if(line.bullish){
+      hexIndex += 1 << k;
+      if(k < 3) lowerIndex += 1 << k;
+      else upperIndex += 1 << (k-3);
+    }
+    if(k < 3){
+      lower += value * BAGUA_TRI_WEIGHTS[k];
+      lowerCapacity += Math.abs(value) * BAGUA_TRI_WEIGHTS[k];
+    }else{
+      upper += value * BAGUA_TRI_WEIGHTS[k-3];
+      upperCapacity += Math.abs(value) * BAGUA_TRI_WEIGHTS[k-3];
+    }
+  });
+  lower = lowerCapacity > 0 ? lower/lowerCapacity : 0;
+  upper = upperCapacity > 0 ? upper/upperCapacity : 0;
+  const strength = Math.max(-1, Math.min(1,(lower + BAGUA_PHI*upper)/(1+BAGUA_PHI)));
+  return {cycle, ready:true, lines, lowerIndex, upperIndex, hexIndex, strength};
+}
+
+function baguaArc(ctx,cx,cy,r,width,strength){
+  ctx.strokeStyle = 'rgba(64,68,84,.72)';
+  ctx.lineWidth = width;
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+  if(Math.abs(strength) < .005) return;
+  const color = strength >= .15 ? '#f0c478' : strength <= -.15 ? '#e2583e' : '#c8cdd6';
+  ctx.strokeStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 7;
+  ctx.beginPath();
+  ctx.arc(cx,cy,r,-Math.PI/2,-Math.PI/2 + strength*Math.PI,strength < 0);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function drawBaguaHex(ctx,cx,cy,result,halfWidth,scale){
+  if(!result.ready){
+    ctx.fillStyle = 'rgba(200,205,214,.55)';
+    ctx.font = `${Math.max(7,8*scale)}px 'Space Mono',monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`${result.have}/${result.required}G`,cx,cy+3*scale);
+    return;
+  }
+  for(let row=0;row<6;row++){
+    const line = result.lines[5-row];
+    const y = cy + (row-2.5)*6.5*scale + (row>=3 ? 2.5 : -2.5)*scale;
+    const thick = (line.sizeClass===2 ? 4.4 : line.sizeClass===0 ? 1.8 : 3) * scale;
+    ctx.lineWidth = Math.max(1,thick);
+    ctx.strokeStyle = line.bullish
+      ? `rgba(222,184,108,${.4+.6*Math.min(1,line.purity)})`
+      : `rgba(226,88,62,${.4+.6*Math.min(1,line.purity)})`;
+    ctx.beginPath();
+    if(line.bullish){
+      ctx.moveTo(cx-halfWidth, y); ctx.lineTo(cx+halfWidth, y);
+    }else{
+      const gap=halfWidth*.16;
+      ctx.moveTo(cx-halfWidth,y); ctx.lineTo(cx-gap,y);
+      ctx.moveTo(cx+gap,y); ctx.lineTo(cx+halfWidth,y);
+    }
+    ctx.stroke();
+  }
+}
+
+function drawBaguaAura(){
+  const rect = baguaCanvas.getBoundingClientRect();
+  const w = rect.width, h = rect.height;
+  if(!w || !h) return;
+  const ctx = bagctx;
+  const scale = Math.min(w,h)/260;
+  const cx=w/2, cy=h/2;
+  ctx.clearRect(0,0,w,h);
+
+  ctx.save();
+  ctx.translate(cx,cy);
+  for(let ring=0;ring<2;ring++){
+    const radius=(124-ring*9)*scale;
+    ctx.rotate((ring===0?Math.PI/8:-Math.PI/16));
+    ctx.strokeStyle=ring===0?'rgba(212,168,67,.30)':'rgba(179,136,255,.24)';
+    ctx.lineWidth=Math.max(.7,(1.1-ring*.25)*scale);
+    ctx.beginPath();
+    for(let i=0;i<=8;i++){
+      const a=-Math.PI/2+i*Math.PI/4;
+      const x=Math.cos(a)*radius, y=Math.sin(a)*radius;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    ctx.rotate((ring===0?-Math.PI/8:Math.PI/16));
+  }
+  for(let i=0;i<8;i++){
+    const a=-Math.PI/2+i*Math.PI/4;
+    const inner=76*scale, outer=123*scale;
+    ctx.strokeStyle=i%2===0?'rgba(212,168,67,.16)':'rgba(157,78,221,.14)';
+    ctx.lineWidth=Math.max(.5,.75*scale);
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a)*inner,Math.sin(a)*inner);
+    ctx.lineTo(Math.cos(a)*outer,Math.sin(a)*outer);
+    ctx.stroke();
+    const nx=Math.cos(a)*123*scale, ny=Math.sin(a)*123*scale;
+    ctx.fillStyle=i%2===0?'rgba(212,168,67,.72)':'rgba(179,136,255,.65)';
+    ctx.beginPath();
+    ctx.arc(nx,ny,Math.max(1,1.7*scale),0,Math.PI*2);
+    ctx.fill();
+  }
+  ctx.strokeStyle='rgba(0,229,160,.14)';
+  ctx.lineWidth=Math.max(.5,.7*scale);
+  ctx.beginPath();
+  ctx.arc(0,0,74*scale,0,Math.PI*2);
+  ctx.stroke();
+  ctx.restore();
+
+  const results = BAGUA_CYCLES.map(calculateBaguaCycle);
+  baguaArc(ctx,cx,cy,86*scale,3.2*scale,results[0].ready?results[0].strength:0);
+  baguaArc(ctx,cx,cy,102*scale,3.2*scale,results[1].ready?results[1].strength:0);
+  baguaArc(ctx,cx,cy,118*scale,3.2*scale,results[2].ready?results[2].strength:0);
+
+  drawBaguaHex(ctx,cx,cy-39*scale,results[2],25*scale,scale);
+  drawBaguaHex(ctx,cx-43*scale,cy+32*scale,results[1],21.5*scale,scale);
+  drawBaguaHex(ctx,cx+43*scale,cy+32*scale,results[0],21.5*scale,scale);
+
+  ctx.textAlign='center';
+  ctx.font=`700 ${Math.max(7,8.5*scale)}px 'Space Mono',monospace`;
+  results.forEach((r,i)=>{
+    const x=i===2?cx:(i===1?cx-43*scale:cx+43*scale);
+    const y=i===2?cy-76*scale:cy+72*scale;
+    ctx.fillStyle=i===2?'#d4a843':i===1?'#b388ff':'#00e5a0';
+    const names=r.ready ? `${BAGUA_NAMES[r.upperIndex]}/${BAGUA_NAMES[r.lowerIndex]}` : '解析待機';
+    ctx.fillText(`${r.cycle}G ${names}`,x,y);
+  });
+  ctx.fillStyle='rgba(237,232,255,.72)';
+  ctx.font=`${Math.max(7,8*scale)}px 'Space Mono',monospace`;
+  ctx.fillText('BAGUA CYCLE',cx,14*scale);
 }
 
 // animate slump for pulse effect
@@ -2214,10 +2480,9 @@ function doSpin(){
       state.hamariCurrent = 0;
       state.spinSinceHit = 0;
 
-      // 振り分け
-      // 通常時はヘソ(特図1)振り分け。時短/HC/遊タイム中の大当たりはRUSH突入濃厚として処理。
-      const hitKind = (prevMode === 'JITAN' || prevMode === 'HC' || prevMode === 'YUTAI')
-        ? { kind:'jitan_rush', rate:1.000, payout:300, jitan:157, label:'時短引き戻し RUSH', isRush:true }
+      // 通常時はヘソ振り分け。時短中の引き戻しはRUSH確定。
+      const hitKind = (prevMode === 'JITAN' || prevMode === 'HC')
+        ? JITAN_RUSH_HIT
         : rollHitKind();
       applyPayout(hitKind.payout);  // 持ち玉は先に加算（ウォレット表示用）
       startHitOverlay(hitKind);     // ★グラフを演出画面で即座に覆う
