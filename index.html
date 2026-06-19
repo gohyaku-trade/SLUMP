@@ -962,7 +962,6 @@ let audioMaster = null;
 let audioStreamDest = null;
 const HIT_SAMPLE_SRC = 'kyuin-hit.mp3';
 let hitSampleElements = [];
-let hitSampleElementIndex = 0;
 let hitSamplePrimed = false;
 let hitSamplePrimeRun = 0;
 
@@ -1027,21 +1026,11 @@ function configureFixedPitchAudio(el){
 
 function initHitSampleElements(){
   if(hitSampleElements.length) return;
-  hitSampleElements = Array.from({length:4}, () => {
+  hitSampleElements = Array.from({length:8}, () => {
     const audio = new Audio(HIT_SAMPLE_SRC);
     configureFixedPitchAudio(audio);
     try{ audio.load(); }catch(e){}
     return audio;
-  });
-}
-
-function stopAllHitSamples(){
-  hitSampleElements.forEach(sample => {
-    try{
-      sample.pause();
-      configureFixedPitchAudio(sample);
-      sample.currentTime = 0;
-    }catch(e){}
   });
 }
 
@@ -1074,15 +1063,24 @@ function primeHitSampleElement(){
   }
 }
 
+function getHitSampleForOverlap(){
+  initHitSampleElements();
+  let sample = hitSampleElements.find(a => a.paused || a.ended || a.readyState === 0);
+  if(!sample){
+    sample = new Audio(HIT_SAMPLE_SRC);
+    configureFixedPitchAudio(sample);
+    hitSampleElements.push(sample);
+  }
+  return sample;
+}
+
 function playFixedHitSample(){
   initHitSampleElements();
   hitSamplePrimeRun++;
-  stopAllHitSamples();
-  const sample = hitSampleElements[hitSampleElementIndex++ % hitSampleElements.length];
+  const sample = getHitSampleForOverlap();
   if(!sample) return;
   try{
     sample.muted = false;
-    sample.pause();
     configureFixedPitchAudio(sample);
     sample.currentTime = 0;
     const p = sample.play();
