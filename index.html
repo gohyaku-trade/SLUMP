@@ -960,8 +960,6 @@ const bagctx = baguaCanvas.getContext('2d');
 let audioCtx = null;
 let audioMaster = null;
 let audioStreamDest = null;
-let deviceAudioEl = null;
-let audioDestinationFallback = false;
 const HIT_SAMPLE_SRC = 'kyuin-hit.mp3';
 let hitSampleElements = [];
 let hitSampleElementIndex = 0;
@@ -976,7 +974,12 @@ function initAudio(){
     return;
   }
   try{
-    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const AudioCtx = window.AudioContext||window.webkitAudioContext;
+    try{
+      audioCtx = new AudioCtx({ latencyHint: 'interactive' });
+    }catch(e){
+      audioCtx = new AudioCtx();
+    }
     getAudioMaster();
     unlockAudioOutput();
     initHitSampleElements();
@@ -989,47 +992,18 @@ function getAudioMaster(){
   if(audioMaster || !audioCtx) return audioMaster;
   audioMaster = audioCtx.createGain();
   audioMaster.gain.value = 1;
+  audioMaster.connect(audioCtx.destination);
 
   if(audioCtx.createMediaStreamDestination){
     audioStreamDest = audioCtx.createMediaStreamDestination();
     audioMaster.connect(audioStreamDest);
-    ensureDeviceAudioElement();
-  } else {
-    audioMaster.connect(audioCtx.destination);
   }
   return audioMaster;
-}
-
-function ensureDeviceAudioElement(){
-  if(deviceAudioEl || !audioStreamDest) return;
-  deviceAudioEl = new Audio();
-  deviceAudioEl.autoplay = true;
-  deviceAudioEl.playsInline = true;
-  deviceAudioEl.setAttribute('playsinline', '');
-  deviceAudioEl.setAttribute('webkit-playsinline', '');
-  deviceAudioEl.srcObject = audioStreamDest.stream;
-  deviceAudioEl.volume = 1;
-  deviceAudioEl.style.display = 'none';
-  if(document.body) document.body.appendChild(deviceAudioEl);
 }
 
 function unlockAudioOutput(){
   if(!audioCtx) return;
   if(audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
-  ensureDeviceAudioElement();
-  if(deviceAudioEl){
-    const p = deviceAudioEl.play();
-    if(p && typeof p.catch === 'function'){
-      p.catch(()=>{
-        if(!audioDestinationFallback){
-          try{
-            audioMaster && audioMaster.connect(audioCtx.destination);
-            audioDestinationFallback = true;
-          }catch(e){}
-        }
-      });
-    }
-  }
 }
 
 function routeAudio(node){
