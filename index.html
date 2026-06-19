@@ -961,15 +961,14 @@ let audioCtx = null;
 let audioMaster = null;
 let audioStreamDest = null;
 const HIT_SAMPLE_SRC = 'kyuin-hit.mp3';
-let hitSampleElements = [];
-let hitSamplePrimed = false;
-let hitSamplePrimeRun = 0;
+let hitSampleBuffer = null;
+let hitSampleDecodePromise = null;
+const fallbackHitSamples = [];
 
 function initAudio(){
   if(audioCtx){
     unlockAudioOutput();
-    initHitSampleElements();
-    primeHitSampleElement();
+    loadHitSampleBuffer();
     return;
   }
   try{
@@ -981,8 +980,7 @@ function initAudio(){
     }
     getAudioMaster();
     unlockAudioOutput();
-    initHitSampleElements();
-    primeHitSampleElement();
+    loadHitSampleBuffer();
     startBGM();
   }catch(e){ console.warn('Audio init failed', e); }
 }
@@ -1024,65 +1022,33 @@ function configureFixedPitchAudio(el){
   el.webkitPreservesPitch = true;
 }
 
-function initHitSampleElements(){
-  if(hitSampleElements.length) return;
-  hitSampleElements = Array.from({length:8}, () => {
-    const audio = new Audio(HIT_SAMPLE_SRC);
-    configureFixedPitchAudio(audio);
-    try{ audio.load(); }catch(e){}
-    return audio;
-  });
+function loadHitSampleBuffer(){
+  if(!audioCtx || hitSampleBuffer || hitSampleDecodePromise) return;
+  hitSampleDecodePromise = fetch(HIT_SAMPLE_SRC)
+    .then(r => {
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.arrayBuffer();
+    })
+    .then(buf => new Promise((resolve, reject) => {
+      const ret = audioCtx.decodeAudioData(buf.slice(0), resolve, reject);
+      if(ret && typeof ret.then === 'function') ret.then(resolve, reject);
+    }))
+    .then(decoded => { hitSampleBuffer = decoded; })
+    .catch(e => {
+      hitSampleDecodePromise = null;
+      console.warn('Hit sample preload failed', e);
+    });
 }
 
-function primeHitSampleElement(){
-  if(hitSamplePrimed) return;
-  initHitSampleElements();
-  const sample = hitSampleElements[0];
-  if(!sample) return;
-  hitSamplePrimed = true;
-  const primeRun = ++hitSamplePrimeRun;
+function playHitSampleFallback(){
   try{
+    const sample = new Audio(HIT_SAMPLE_SRC);
     configureFixedPitchAudio(sample);
-    sample.muted = true;
-    sample.currentTime = 0;
-    const p = sample.play();
-    if(p && typeof p.then === 'function'){
-      p.then(()=>{
-        if(primeRun !== hitSamplePrimeRun) return;
-        sample.pause();
-        sample.currentTime = 0;
-        sample.muted = false;
-      }).catch(()=>{ sample.muted = false; });
-    } else {
-      sample.pause();
-      sample.currentTime = 0;
-      sample.muted = false;
-    }
-  }catch(e){
-    try{ sample.muted = false; }catch(_){}
-  }
-}
-
-function getHitSampleForOverlap(){
-  initHitSampleElements();
-  let sample = hitSampleElements.find(a => a.paused || a.ended || a.readyState === 0);
-  if(!sample){
-    sample = new Audio(HIT_SAMPLE_SRC);
-    configureFixedPitchAudio(sample);
-    hitSampleElements.push(sample);
-  }
-  return sample;
-}
-
-function playFixedHitSample(){
-  initHitSampleElements();
-  hitSamplePrimeRun++;
-  const sample = getHitSampleForOverlap();
-  if(!sample) return;
-  try{
-    sample.muted = false;
-    configureFixedPitchAudio(sample);
-    sample.currentTime = 0;
+    fallbackHitSamples.push(sample);
+    sample.addEventListener('ended', () => {
+      const i = fallbackHitSamples.indexOf(sample);
+      if(i >= 0) fallbackHitSamples.splice(i, 1);
+    }, {once:true});
     const p = sample.play();
     if(p && typeof p.catch === 'function') p.catch(()=>{});
   }catch(e){}
@@ -1091,7 +1057,22 @@ function playFixedHitSample(){
 function playHitSample(){
   if(!state.soundOn) return;
   unlockAudioOutput();
-  playFixedHitSample();
+  loadHitSampleBuffer();
+  if(hitSampleBuffer && audioCtx){
+    try{
+      const src = audioCtx.createBufferSource();
+      const g = audioCtx.createGain();
+      src.buffer = hitSampleBuffer;
+      src.playbackRate.setValueAtTime(1, audioCtx.currentTime);
+      if(src.detune) src.detune.setValueAtTime(0, audioCtx.currentTime);
+      g.gain.setValueAtTime(0.9, audioCtx.currentTime);
+      src.connect(g);
+      routeAudio(g);
+      src.start(audioCtx.currentTime);
+      return;
+    }catch(e){}
+  }
+  playHitSampleFallback();
 }
 
 function beep(freq=440, dur=0.08, type='square', vol=0.08){
