@@ -963,16 +963,16 @@ let audioStreamDest = null;
 let deviceAudioEl = null;
 let audioDestinationFallback = false;
 const HIT_SAMPLE_SRC = 'kyuin-hit.mp3';
-let hitSampleBuffer = null;
-let hitSampleDecodePromise = null;
 let hitSampleElements = [];
 let hitSampleElementIndex = 0;
+let hitSamplePrimed = false;
+let hitSamplePrimeRun = 0;
 
 function initAudio(){
   if(audioCtx){
     unlockAudioOutput();
     initHitSampleElements();
-    loadHitSampleBuffer();
+    primeHitSampleElement();
     return;
   }
   try{
@@ -980,7 +980,7 @@ function initAudio(){
     getAudioMaster();
     unlockAudioOutput();
     initHitSampleElements();
-    loadHitSampleBuffer();
+    primeHitSampleElement();
     startBGM();
   }catch(e){ console.warn('Audio init failed', e); }
 }
@@ -1061,23 +1061,53 @@ function initHitSampleElements(){
   });
 }
 
-function loadHitSampleBuffer(){
-  if(hitSampleBuffer || hitSampleDecodePromise || !audioCtx) return;
-  hitSampleDecodePromise = fetch(HIT_SAMPLE_SRC)
-    .then(r => r.arrayBuffer())
-    .then(buf => new Promise((resolve, reject) => {
-      const ret = audioCtx.decodeAudioData(buf.slice(0), resolve, reject);
-      if(ret && typeof ret.then === 'function') ret.then(resolve, reject);
-    }))
-    .then(decoded => { hitSampleBuffer = decoded; })
-    .catch(e => { console.warn('Hit sample preload failed', e); });
+function stopAllHitSamples(){
+  hitSampleElements.forEach(sample => {
+    try{
+      sample.pause();
+      configureFixedPitchAudio(sample);
+      sample.currentTime = 0;
+    }catch(e){}
+  });
 }
 
-function playHitSampleElementFallback(){
+function primeHitSampleElement(){
+  if(hitSamplePrimed) return;
   initHitSampleElements();
+  const sample = hitSampleElements[0];
+  if(!sample) return;
+  hitSamplePrimed = true;
+  const primeRun = ++hitSamplePrimeRun;
+  try{
+    configureFixedPitchAudio(sample);
+    sample.muted = true;
+    sample.currentTime = 0;
+    const p = sample.play();
+    if(p && typeof p.then === 'function'){
+      p.then(()=>{
+        if(primeRun !== hitSamplePrimeRun) return;
+        sample.pause();
+        sample.currentTime = 0;
+        sample.muted = false;
+      }).catch(()=>{ sample.muted = false; });
+    } else {
+      sample.pause();
+      sample.currentTime = 0;
+      sample.muted = false;
+    }
+  }catch(e){
+    try{ sample.muted = false; }catch(_){}
+  }
+}
+
+function playFixedHitSample(){
+  initHitSampleElements();
+  hitSamplePrimeRun++;
+  stopAllHitSamples();
   const sample = hitSampleElements[hitSampleElementIndex++ % hitSampleElements.length];
   if(!sample) return;
   try{
+    sample.muted = false;
     sample.pause();
     configureFixedPitchAudio(sample);
     sample.currentTime = 0;
@@ -1087,24 +1117,9 @@ function playHitSampleElementFallback(){
 }
 
 function playHitSample(){
-  if(!state.soundOn || !audioCtx) return;
+  if(!state.soundOn) return;
   unlockAudioOutput();
-  loadHitSampleBuffer();
-  try{
-    if(hitSampleBuffer){
-      const src = audioCtx.createBufferSource();
-      const g = audioCtx.createGain();
-      src.buffer = hitSampleBuffer;
-      src.playbackRate.setValueAtTime(1, audioCtx.currentTime);
-      if(src.detune) src.detune.setValueAtTime(0, audioCtx.currentTime);
-      g.gain.setValueAtTime(0.9, audioCtx.currentTime);
-      src.connect(g);
-      routeAudio(g);
-      src.start(audioCtx.currentTime);
-      return;
-    }
-    playHitSampleElementFallback();
-  }catch(e){}
+  playFixedHitSample();
 }
 
 function beep(freq=440, dur=0.08, type='square', vol=0.08){
