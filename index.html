@@ -965,10 +965,13 @@ let audioDestinationFallback = false;
 const HIT_SAMPLE_SRC = 'kyuin-hit.mp3';
 let hitSampleBuffer = null;
 let hitSampleDecodePromise = null;
+let hitSampleElements = [];
+let hitSampleElementIndex = 0;
 
 function initAudio(){
   if(audioCtx){
     unlockAudioOutput();
+    initHitSampleElements();
     loadHitSampleBuffer();
     return;
   }
@@ -976,6 +979,7 @@ function initAudio(){
     audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     getAudioMaster();
     unlockAudioOutput();
+    initHitSampleElements();
     loadHitSampleBuffer();
     startBGM();
   }catch(e){ console.warn('Audio init failed', e); }
@@ -1034,6 +1038,29 @@ function routeAudio(node){
   return node;
 }
 
+function configureFixedPitchAudio(el){
+  el.preload = 'auto';
+  el.playsInline = true;
+  el.setAttribute('playsinline', '');
+  el.setAttribute('webkit-playsinline', '');
+  el.volume = 0.9;
+  el.defaultPlaybackRate = 1;
+  el.playbackRate = 1;
+  el.preservesPitch = true;
+  el.mozPreservesPitch = true;
+  el.webkitPreservesPitch = true;
+}
+
+function initHitSampleElements(){
+  if(hitSampleElements.length) return;
+  hitSampleElements = Array.from({length:4}, () => {
+    const audio = new Audio(HIT_SAMPLE_SRC);
+    configureFixedPitchAudio(audio);
+    try{ audio.load(); }catch(e){}
+    return audio;
+  });
+}
+
 function loadHitSampleBuffer(){
   if(hitSampleBuffer || hitSampleDecodePromise || !audioCtx) return;
   hitSampleDecodePromise = fetch(HIT_SAMPLE_SRC)
@@ -1046,6 +1073,19 @@ function loadHitSampleBuffer(){
     .catch(e => { console.warn('Hit sample preload failed', e); });
 }
 
+function playHitSampleElementFallback(){
+  initHitSampleElements();
+  const sample = hitSampleElements[hitSampleElementIndex++ % hitSampleElements.length];
+  if(!sample) return;
+  try{
+    sample.pause();
+    configureFixedPitchAudio(sample);
+    sample.currentTime = 0;
+    const p = sample.play();
+    if(p && typeof p.catch === 'function') p.catch(()=>{});
+  }catch(e){}
+}
+
 function playHitSample(){
   if(!state.soundOn || !audioCtx) return;
   unlockAudioOutput();
@@ -1055,14 +1095,15 @@ function playHitSample(){
       const src = audioCtx.createBufferSource();
       const g = audioCtx.createGain();
       src.buffer = hitSampleBuffer;
+      src.playbackRate.setValueAtTime(1, audioCtx.currentTime);
+      if(src.detune) src.detune.setValueAtTime(0, audioCtx.currentTime);
       g.gain.setValueAtTime(0.9, audioCtx.currentTime);
       src.connect(g);
       routeAudio(g);
       src.start(audioCtx.currentTime);
       return;
     }
-    sweep(1800, 4200, 0.18, 'sine', 0.12);
-    setTimeout(()=>sweep(2400, 5200, 0.16, 'sine', 0.10), 55);
+    playHitSampleElementFallback();
   }catch(e){}
 }
 
